@@ -57,10 +57,12 @@ A robust fallback system requires realistic defaults that deliver delightful fun
 - **Mechanism**: Generates an anonymous device fingerprint (`mimo_fingerprint`), queries `https://api.xiaomimimo.com/api/free-ai/openai/chat`, and requires **zero API key and zero sign-up**.
 - **Role**: Primary zero-config cloud fallback. For offline capability on WebGPU-enabled machines, the system pairs with **WebLLM** / **RWKV**.
 
-### 2.2 Artistry (Image Gen): Pollinations AI (`pollinations`)
+### 2.2 Artistry (Image Gen): Pollinations AI (`pollinations`) with Free Auto Router
 - **Code Reality**: Fully implemented in the desktop main process ([`artistry-bridge.ts`](file:///Users/richardpinedo/Projects.nosync/airi/airi_dasilva333/apps/stage-tamagotchi/src/main/services/airi/widgets/artistry-bridge.ts), [`providers/pollinations.ts`](file:///Users/richardpinedo/Projects.nosync/airi/airi_dasilva333/apps/stage-tamagotchi/src/main/services/airi/widgets/providers/pollinations.ts)) and renderer ([`artistry.vue`](file:///Users/richardpinedo/Projects.nosync/airi/airi_dasilva333/packages/stage-pages/src/pages/settings/modules/artistry.vue)).
-- **Mechanism**: Unmetered, zero-auth endpoint `https://image.pollinations.ai/prompt/...` running FLUX.1 Schnell and SDXL.
-- **Role**: Replaces `comfyui` as the default Artistry engine. New users generate journal polaroids, selfies, and background art instantly without installing local Python CUDA rigs.
+- **Mechanism**: Inspecting `providers/pollinations.ts:71`:
+  `const modelParam = model ? `&model=${encodeURIComponent(model)}` : ''`
+  When `model = ""` (empty string), Pollinations omits the model parameter and routes directly to the **Free Auto Router** on their unauthenticated public cluster without requiring a Pollen API key or registration. (Passing a specific model like `flux` routes to their metered Pollen tier).
+- **Role**: Replaces `comfyui` as the default Artistry engine with `model: ""` (`Free Auto Router`). New users generate journal polaroids, selfies, and background art instantly without installing local Python CUDA rigs.
 
 ### 2.3 Speech (TTS): Kokoro WebGPU (82MB) + Web Speech API
 - **Code Reality**: Kokoro WebGPU worker is in [`packages/stage-ui/src/workers/kokoro/`](file:///Users/richardpinedo/Projects.nosync/airi/airi_dasilva333/packages/stage-ui/src/workers/kokoro/) and Web Speech API is in [`packages/stage-ui/src/libs/providers/providers/web-speech-api/`](file:///Users/richardpinedo/Projects.nosync/airi/airi_dasilva333/packages/stage-ui/src/libs/providers/providers/web-speech-api/).
@@ -83,53 +85,50 @@ A robust fallback system requires realistic defaults that deliver delightful fun
 
 ---
 
-## 3. Two-Tiered Fallback Architecture
+## 3. The Invariant Matrix & 3-Tier Double Failover Architecture
 
-To deliver both clear configuration predictability and runtime resilience, the system operates across two tiers:
+### 3.1 The Faculty Invariant Matrix
+Not all AI faculties operate at the same scope. AIRI enforces a strict separation between **Card-Bound Faculties** (which travel with a companion card) and **System-Bound Faculties** (which belong to the client device/user):
+
+| Faculty Domain | Card Slot in Card Editor? | Architectural Scope | Failover Tiers |
+| :--- | :--- | :--- | :--- |
+| **Mind (Consciousness)** | **YES** (`modules.consciousness`) | Persona soul | 3-Tier: Card $\rightarrow$ Global $\rightarrow$ Fallback |
+| **Speech (TTS)** | **YES** (`modules.speech`) | Persona voice | 3-Tier: Card $\rightarrow$ Global $\rightarrow$ Fallback |
+| **Artistry (Image Gen)** | **YES** (`artistry`) | Character aesthetics & prompt prefix | 3-Tier: Card $\rightarrow$ Global $\rightarrow$ Fallback |
+| **Hearing (STT)** | **NO** (Client mic hardware) | User audio input | 2-Tier: Global $\rightarrow$ Fallback |
+| **Vision (VLM / OCR)** | **NO** (Client screen sensor) | Desktop observation & salience | 2-Tier: Global $\rightarrow$ Fallback |
+
+### 3.2 The 3-Tier Double Failover Chain
+Rather than complex routing heuristics, the system uses a simple, predictable **3-Tier Double Failover**:
 
 ```mermaid
 flowchart TD
-    subgraph Tier 1: Configuration-Time Cascade
-        CardConfig[Character Card Config] -->|Explicit Override| ResolvedEngine[Active Faculty Engine]
-        CardConfig -->|Unset or 'Inherit'| GlobalDefault[User-Configured Global Default]
-        GlobalDefault -->|Unconfigured| FactorySafe[Factory Safe Baseline]
-        FactorySafe --> ResolvedEngine
-    end
+    subgraph Execution Pipeline
+        Start[Inference Turn Initiated] --> HasCardOverride{Character Card Defines Engine?}
+        HasCardOverride -->|Yes| TryCard[Attempt Tier 1: Character Engine]
+        HasCardOverride -->|No / Inherit| TryGlobal[Attempt Tier 2: Global Preferred Engine]
 
-    subgraph Tier 2: Runtime Circuit Breaker
-        ResolvedEngine --> RunTurn[Execute Inference Turn]
-        RunTurn -->|Success 200 OK| Output[Deliver Response / Audio / Art]
-        RunTurn -->|401 Auth / 429 Quota / 500 Outage / Network Drop| CircuitBreaker{Circuit Breaker Enabled?}
-        CircuitBreaker -->|Yes| FallbackEngine[Execute Fallback Engine]
-        CircuitBreaker -->|No| ThrowError[Render Chat Error Box]
-        FallbackEngine -->|Success| OutputWithToast[Deliver Response + Notify User]
-        FallbackEngine -->|Fail| ThrowError
+        TryCard -->|Success 200| Complete[Deliver Response]
+        TryCard -->|Fail: 429 / 401 / Outage| TryGlobal
+
+        TryGlobal -->|Success 200| CompleteWithGlobalToast[Deliver Response + Notify 'Card Model Failed']
+        TryGlobal -->|Fail: 429 / 401 / Outage| TryFallback[Attempt Tier 3: Safety Fallback Engine]
+
+        TryFallback -->|Success 200| CompleteWithFallbackToast[Deliver Response + Notify 'Switched to Safety Fallback']
+        TryFallback -->|Fail| RenderErrorBox[Render Terminal Chat Error Box]
     end
 ```
 
-### 3.1 Tier 1: Configuration-Time Cascade (Inheritance)
-When an AIRI subsystem needs an inference provider, it resolves the target through a strict 3-level cascade:
-
-1. **Character Card Override**: If `activeCard.extensions.airi.modules[faculty]` explicitly defines a `provider` and `model`, that choice is respected.
-2. **Global Faculty Default**: If the card specifies `"inherit"` (or leaves the field undefined), the system resolves the provider configured in `useFacultyDefaultsStore`.
-3. **Factory Safe Baseline**: If the user has never configured a custom global default, the system automatically uses the zero-sign-up factory baseline:
-   - Mind: `mimo` (`mimo-auto`)
-   - Artistry: `pollinations` (`flux`)
-   - Speech: `kokoro-local` (or `web-speech-api`)
-   - Hearing: `whisper-local` (or `web-speech-api`)
-   - Vision: `wd14-local`
-
-### 3.2 Tier 2: Runtime Circuit Breaker (Resilient Failover)
-When a turn is executed in `packages/stage-ui/src/stores/chat.ts`:
-1. If the resolved provider fails with a recoverable error:
-   - **HTTP 401 / 403**: Invalid or expired API key.
-   - **HTTP 429**: Rate limit exceeded or out of cloud credits.
-   - **HTTP 500 / 502 / 503**: Remote provider outage.
-   - **Fetch Timeout / Offline**: Network connection drop.
-2. The `chatOrchestrator` intercepts the error before writing to the chat UI.
-3. If the **Runtime Circuit Breaker** is enabled, it automatically replays the turn against the configured **Automated Fallback Engine** (e.g. MiMo for LLM, Pollinations for Artistry).
-4. The response streams normally, accompanied by a discreet toast or bubble badge:
-   > *"OpenRouter quota reached. Responded seamlessly using MiMo (Free Cloud fallback)."*
+1. **Tier 1: Character Card Override** (`(Provider, Model)`):
+   - Defined in the Character Card Editor (`modules` / `artistry` tabs).
+   - If configured, AIRI attempts this engine first.
+2. **Tier 2: Global Preferred Baseline** (`(Provider, Model)`):
+   - Configured in `Settings > Modules` (e.g. `OpenRouter + Claude 3.5 Sonnet`, or `Kokoro + af_heart`).
+   - If the card specifies `"None / Inherit"`, this is the primary engine.
+   - If the card engine fails (HTTP 429 Quota, 401 Auth, Timeout), the system steps down to this Global Preferred.
+3. **Tier 3: Safety Fallback Net** (`(Provider, Model)`):
+   - Zero-sign-up, zero-friction safe engine (e.g. `MiMo + mimo-auto`, `Pollinations + Auto Router`, `Web Speech API`).
+   - If Tier 2 fails, the system transparently steps down to Tier 3, ensuring the companion never dies.
 
 ---
 
@@ -148,23 +147,54 @@ The passive explainer box (`modules/index.vue:63-95`) is completely replaced by 
 │ 🧠 Mind (LLM)│ 🗣️ Speech    │ 👂 Hearing   │ 🎨 Artistry      │ 👁️ Vision       │
 ├──────────────┼──────────────┼──────────────┼──────────────────┼─────────────────┤
 │ Primary:     │ Primary:     │ Primary:     │ Primary:         │ Primary:        │
-│ [OpenRouter ▾]│ [Kokoro 82M▾]│ [Whisper ▾]  │ [Pollinations ▾] │ [Auto (WD14) ▾] │
+│ OpenRouter   │ Kokoro 82M   │ Whisper Tiny │ Pollinations     │ SmilingWolf WD14│
+│ claude-3.5-s │ af_heart     │ en-tiny      │ (Auto Free)      │ v3-swinv2       │
 │              │              │              │                  │                 │
 │ Fallback:    │ Fallback:    │ Fallback:    │ Fallback:        │ Fallback:       │
-│ [MiMo Free ▾]│ [Web Speech▾]│ [Web Speech▾]│ [ComfyUI Local ▾]│ [Cloud VLM ▾]   │
+│ MiMo (Free)  │ Web Speech   │ Web Speech   │ ComfyUI (Local)  │ None            │
+│ mimo-auto    │ (browser)    │ (browser)    │                  │                 │
 │              │              │              │                  │                 │
-│ 🟢 Failover:  │ 🟢 Failover:  │ ⚪ Failover:  │ 🟢 Failover:     │ ⚪ Failover:     │
-│ Auto on 429  │ On worker err│ Manual       │ On timeout       │ Off             │
+│ 🟢 Auto 429  │ 🟢 Auto 429  │ 🟢 Auto-fail │ 🟢 Auto-fail     │ ⚪ Manual       │
 └──────────────┴──────────────┴──────────────┴──────────────────┴─────────────────┘
 ```
 
-#### Key Capabilities in this Hub:
-- **Full Row Header**: Prominent overview replacing the verbiage callout.
-- **5-Column Matrix**: Direct visualization of Mind, Speech, Hearing, Artistry, and Vision.
-- **Primary Selector**: One-click dropdown to pick the global default for unassigned cards.
-- **Fallback Selector**: One-click dropdown to assign the safety-net provider.
-- **Circuit Breaker Toggle**: Controls whether automatic failover is active for that faculty.
-- **[Reset to Factory Safe] Button**: Instantly restores the zero-sign-up configuration (MiMo, Pollinations, Kokoro, Whisper, WD14).
+#### Dual-Pair `(Provider, Model)` Drawer with Playground Bridge & Speech 3-Tuple:
+Clicking any faculty card expands the **Detailed Faculty Configuration Drawer**:
+1. **Contextual Breadcrumb**:
+   - Displays the active card's setting: *"Active Card (`<Companion Name>`): `None / nvidia` (Inheriting Global Preferred)"*.
+2. **Dual Engine Pairs & Speech 3-Tuple Architecture**:
+   - **All-Provider Visibility with Prioritized Sorting**: Instead of restricting fallback choices to only local/free engines, **all available providers** in the ecosystem are accessible in both Primary and Fallback selectors.
+   - **Native `<optgroup>` Segmentation**:
+     - `<optgroup label="Recommended Fallbacks (Free & Local)">`: Houses zero-sign-up / on-device baselines (MiMo, WebLLM, Kokoro, Whisper, Pollinations, ComfyUI, WD14).
+     - `<optgroup label="All Available Providers">`: Lists all other user-configured cloud and local inference services.
+   - **Speech 3-Tuple (`provider`, `model`, `voiceId`)**:
+     - **Primary Speech** requires 3 components: Provider, Model, and Voice.
+     - Default catch-all voice: `af_heart` (Heart · Warm Conversational Female).
+     - Full integration with **Audio Studio Virtual Voice Profiles** (`docs/feat-audio-studio.md`) and the user's configured profile (`userProfileStore.voiceProfileId`).
+   - **Streamlined Fallback Speech (Preventing 6-Dropdown Sprawl)**:
+     - To prevent cognitive fatigue and layout sprawl (avoiding 3 Primary + 3 Fallback = 6 dropdowns), Speech Fallback is streamlined into a single 1-click **Safety Fallback Engine** selector:
+       - `Web Speech API (Browser Voice · Instant Zero-Download Safety Net - Default)`
+       - `Kokoro WebGPU af_heart (Local Warm Female Catch-All · 82MB)`
+       - `Pocket-TTS anna (Local Multilingual CPU Catch-All · ~100MB)`
+       - `Mute / Silent (speech-noop)`
+       - `Custom Provider / Model / Voice...` (unfolds full manual override pair if desired).
+     - Total Speech dropdowns: 4 instead of 6.
+   - **Full Artistry Model Resolution (Playground-Driven)**:
+     - **Pollinations AI**: Free Auto Router (`model: ""`), plus cached live models with token pricing (e.g. `FLUX.1 Schnell (0.002 pollen)`, `GPT Image 1.5 (0.000024 pollen)`, `Nano Banana Pro (0.00012 pollen)`, `Seedream 4.5`).
+     - **Nano Banana**: Google AI Studio engines (`Nano Banana 2 - Gemini 3.1 Flash Image`, `Nano Banana Pro`, `Nano Banana`).
+     - **Replicate**: Curated cloud presets with cost annotations (`flux-schnell ($1 / 333 imgs)`, `p-image`, `z-turbo`, `z-turbo-lora`).
+     - **ComfyUI**: Dynamic list of uploaded local workflows annotated with exposed fields count (e.g. `Default Text2Img (3 exposed fields)`).
+     - **None**: Explicitly disabled state.
+3. **Failover Triggers Checklist**:
+   - `[x]` HTTP 429: Rate Limit / Quota Exhaustion
+   - `[x]` HTTP 401/403: Expired / Invalid API Key
+   - `[x]` HTTP 500/503: Provider Outage
+   - `[x]` Network Timeout (>15 seconds)
+4. **Consolidated Drawer Footer**:
+   - Left-aligned: `[ 🧪 Open Full <Faculty> Playground → ]` (navigates to `/settings/modules/<faculty>`).
+   - Right-aligned: `[ Cancel ]` and `[ Apply to System ]`.
+5. **[Reset to Factory Safe]**:
+   - Instantly restores the zero-sign-up baseline across all 5 faculties.
 
 ### 4.2 Secondary Touchpoint: `Settings > Inference Providers` (Option B)
 In `packages/stage-pages/src/pages/settings/providers/index.vue`:
@@ -191,10 +221,14 @@ Following AIRI's Data Catalog conventions (`docs/data-catalog.md`), settings are
 export interface FacultyConfig {
   primaryProvider: string
   primaryModel: string
+  primaryVoiceId?: string
   fallbackProvider: string
   fallbackModel: string
+  fallbackVoiceId?: string
   autoFailover: boolean
   failoverTriggers: ('auth' | 'quota' | 'server_error' | 'timeout')[]
+  notificationStyle: 'toast' | 'badge' | 'silent'
+  recoveryIntervalMinutes: number
 }
 
 export interface GlobalFacultyDefaultsState {
@@ -213,14 +247,20 @@ export const FACTORY_SAFE_DEFAULTS: GlobalFacultyDefaultsState = {
     fallbackModel: '',
     autoFailover: true,
     failoverTriggers: ['auth', 'quota', 'server_error', 'timeout'],
+    notificationStyle: 'toast',
+    recoveryIntervalMinutes: 15,
   },
   speech: {
     primaryProvider: 'kokoro-local',
     primaryModel: 'onnx-community/Kokoro-82M-v1.0-ONNX',
+    primaryVoiceId: 'af_heart',
     fallbackProvider: 'web-speech-api',
     fallbackModel: '',
+    fallbackVoiceId: '',
     autoFailover: true,
     failoverTriggers: ['server_error', 'timeout'],
+    notificationStyle: 'toast',
+    recoveryIntervalMinutes: 15,
   },
   hearing: {
     primaryProvider: 'whisper-local',

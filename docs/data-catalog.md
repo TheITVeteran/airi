@@ -794,6 +794,12 @@ interface StoredCustomVrmAnimation {
 | `settings/theme/background/gallery-options` | `Record<string, { id, blur }>` | — | `packages/stage-layouts/src/stores/background.ts` |
 | `settings/theme/background/gallery-active` | `string` | — | `packages/stage-layouts/src/stores/background.ts` |
 
+### 4.2b Global Faculty Defaults & Fallbacks
+
+| Key | Type | Default | File |
+| :--- | :--- | :--- | :--- |
+| `settings/faculties/defaults` | `GlobalFacultyDefaultsState` | `FACTORY_SAFE_DEFAULTS` | `stores/faculty-defaults.ts` |
+
 ### 4.3 Consciousness (LLM)
 
 | Key | Type | Default | File |
