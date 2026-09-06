@@ -50,7 +50,7 @@ const selectedActingIdleAnimations = defineModel<string[]>('selectedActingIdleAn
 const pacingEnabled = defineModel<boolean>('pacingEnabled', { default: false })
 const pacingArmMinMs = defineModel<number>('pacingArmMinMs', { default: 1200 })
 const pacingArmMaxMs = defineModel<number>('pacingArmMaxMs', { default: 3500 })
-const pacingMaxFillerDurationMs = defineModel<number>('pacingMaxFillerDurationMs', { default: 1200 })
+const pacingMaxFillerDurationMs = defineModel<number>('pacingMaxFillerDurationMs', { default: 2200 })
 const pacingCategoryThreshold = defineModel<number>('pacingCategoryThreshold', { default: 1 })
 const pacingMaxFillersPerTurn = defineModel<number>('pacingMaxFillersPerTurn', { default: 3 })
 const pacingIntervalMs = defineModel<number>('pacingIntervalMs', { default: 15000 })
@@ -360,6 +360,19 @@ function removePhrase(text: string) {
 function resetToDefaultFillers() {
   pacingFillers.value = JSON.parse(JSON.stringify(DEFAULT_PACING_FILLERS))
   void refreshCacheStatuses()
+}
+
+function resetThresholdsToDefaults() {
+  pacingArmMinMs.value = 1200
+  pacingArmMaxMs.value = 3500
+  pacingMaxFillerDurationMs.value = 2200
+  pacingCategoryThreshold.value = 1
+  pacingMaxFillersPerTurn.value = 3
+  pacingIntervalMs.value = 15000
+  pacingMaxFillerSynthesisBudgetMs.value = 2500
+  pacingMaxSynthesisBudgetMs.value = 2500
+  pacingDynamicAfterMs.value = 15000
+  pacingCandidateTtlMs.value = 15000
 }
 </script>
 
@@ -983,6 +996,13 @@ function resetToDefaultFillers() {
             <span class="text-xs text-neutral-700 font-semibold tracking-wider uppercase dark:text-neutral-300">
               Adaptive Latency & Pacing Thresholds
             </span>
+            <button
+              type="button"
+              class="text-[11px] text-neutral-500 underline transition-colors hover:text-neutral-800 dark:hover:text-neutral-200"
+              @click="resetThresholdsToDefaults"
+            >
+              Reset to Defaults
+            </button>
           </div>
 
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1058,15 +1078,15 @@ function resetToDefaultFillers() {
               <input
                 v-model.number="pacingMaxFillerDurationMs"
                 type="range"
-                min="400"
-                max="2200"
+                min="800"
+                max="3500"
                 step="50"
                 class="h-1.5 w-full cursor-pointer accent-primary-500"
               >
               <div class="flex items-center justify-between text-[10px] text-neutral-400">
-                <span>400ms (Snappy)</span>
-                <span>1200ms (Default)</span>
-                <span>2200ms</span>
+                <span>800ms (Snappy)</span>
+                <span>2200ms (Default)</span>
+                <span>3500ms (Spacious)</span>
               </div>
             </div>
 

@@ -170,7 +170,7 @@ const selectedActingIdleAnimations = ref<string[]>([])
 const pacingEnabled = ref<boolean>(false)
 const pacingArmMinMs = ref<number>(1200)
 const pacingArmMaxMs = ref<number>(3500)
-const pacingMaxFillerDurationMs = ref<number>(1200)
+const pacingMaxFillerDurationMs = ref<number>(2200)
 const pacingCategoryThreshold = ref<number>(1)
 const pacingMaxFillersPerTurn = ref<number>(3)
 const pacingIntervalMs = ref<number>(15000)
@@ -1127,7 +1127,7 @@ function initializeCard(): Card {
   pacingEnabled.value = airiExt?.acting?.pacing?.enabled ?? false
   pacingArmMinMs.value = airiExt?.acting?.pacing?.armMinMs ?? 1200
   pacingArmMaxMs.value = airiExt?.acting?.pacing?.armMaxMs ?? 3500
-  pacingMaxFillerDurationMs.value = airiExt?.acting?.pacing?.maxFillerDurationMs ?? 1200
+  pacingMaxFillerDurationMs.value = airiExt?.acting?.pacing?.maxFillerDurationMs ?? 2200
   pacingCategoryThreshold.value = airiExt?.acting?.pacing?.categoryThreshold ?? 1
   pacingMaxFillersPerTurn.value = airiExt?.acting?.pacing?.maxFillersPerTurn ?? 3
   pacingIntervalMs.value = airiExt?.acting?.pacing?.pacingIntervalMs ?? 15000
