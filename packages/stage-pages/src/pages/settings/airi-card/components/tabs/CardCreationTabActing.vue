@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { PrewarmProgressEvent } from '@proj-airi/stage-ui/libs/pacing'
 import type { SpeechCapabilitiesInfo } from '@proj-airi/stage-ui/stores/providers'
-import type { ThinkingCategory, ThinkingFillerPhrase } from '@proj-airi/stage-ui/types/pacing'
+import type { PacingProfileId, ThinkingCategory, ThinkingFillerPhrase } from '@proj-airi/stage-ui/types/pacing'
 
 import { isNeedleModelCached, needleClient } from '@proj-airi/stage-ui/libs/inference'
 import {
@@ -12,8 +12,12 @@ import {
 } from '@proj-airi/stage-ui/libs/pacing'
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
 import { useProvidersStore } from '@proj-airi/stage-ui/stores/providers'
-import { DEFAULT_PACING_FILLERS } from '@proj-airi/stage-ui/types/pacing'
-import { FieldInput, FieldRange } from '@proj-airi/ui'
+import {
+  DEFAULT_PACING_FILLERS,
+  detectActivePacingProfile,
+  PACING_PROFILES,
+} from '@proj-airi/stage-ui/types/pacing'
+import { FieldInput } from '@proj-airi/ui'
 import { computed, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -65,6 +69,7 @@ const pacingDynamicAfterMs = defineModel<number>('pacingDynamicAfterMs', { defau
 const pacingCandidateTtlMs = defineModel<number>('pacingCandidateTtlMs', { default: 15000 })
 const pacingMaxFillerSynthesisBudgetMs = defineModel<number>('pacingMaxFillerSynthesisBudgetMs', { default: 3200 })
 const pacingMaxSynthesisBudgetMs = defineModel<number>('pacingMaxSynthesisBudgetMs', { default: 3200 })
+const pacingProfile = defineModel<string>('pacingProfile', { default: 'balanced' })
 const pacingExperimentalOrganicPivots = defineModel<boolean>('pacingExperimentalOrganicPivots', { default: false })
 
 // Sub-Tab Navigation (Consolidated 3 Hubs)
@@ -402,17 +407,44 @@ function resetToDefaultFillers() {
   void refreshCacheStatuses()
 }
 
+function applyPacingProfile(profileId: 'snappy' | 'balanced' | 'deep_cot') {
+  const profile = PACING_PROFILES[profileId]
+  if (!profile)
+    return
+  pacingProfile.value = profileId
+  const s = profile.settings
+  pacingArmMinMs.value = s.armMinMs
+  pacingArmMaxMs.value = s.armMaxMs
+  pacingMaxFillerDurationMs.value = s.maxFillerDurationMs
+  pacingIntervalMs.value = s.pacingIntervalMs
+  pacingMaxFillersPerTurn.value = s.maxFillersPerTurn
+  pacingMaxSynthesisBudgetMs.value = s.maxSynthesisBudgetMs
+  pacingMaxFillerSynthesisBudgetMs.value = s.maxFillerSynthesisBudgetMs
+  pacingDynamicAsidesEnabled.value = s.dynamicAsidesEnabled
+  pacingSemanticExtractorEnabled.value = s.semanticExtractorEnabled
+  pacingDynamicAfterMs.value = s.dynamicAfterMs
+  pacingCandidateTtlMs.value = s.candidateTtlMs
+
+  if (s.semanticExtractorEnabled && !isNeedlePrepared.value && !isNeedleDownloading.value) {
+    void downloadAndPrepareNeedle()
+  }
+}
+
+const currentDetectedProfile = computed<PacingProfileId>(() => {
+  return detectActivePacingProfile({
+    armMinMs: pacingArmMinMs.value,
+    armMaxMs: pacingArmMaxMs.value,
+    maxFillerDurationMs: pacingMaxFillerDurationMs.value,
+    pacingIntervalMs: pacingIntervalMs.value,
+    maxFillersPerTurn: pacingMaxFillersPerTurn.value,
+    maxSynthesisBudgetMs: pacingMaxSynthesisBudgetMs.value,
+    dynamicAsidesEnabled: pacingDynamicAsidesEnabled.value,
+    semanticExtractorEnabled: pacingSemanticExtractorEnabled.value,
+  })
+})
+
 function resetThresholdsToDefaults() {
-  pacingArmMinMs.value = 1200
-  pacingArmMaxMs.value = 3500
-  pacingMaxFillerDurationMs.value = 3000
-  pacingCategoryThreshold.value = 1
-  pacingMaxFillersPerTurn.value = 3
-  pacingIntervalMs.value = 15000
-  pacingMaxFillerSynthesisBudgetMs.value = 3200
-  pacingMaxSynthesisBudgetMs.value = 3200
-  pacingDynamicAfterMs.value = 15000
-  pacingCandidateTtlMs.value = 15000
+  applyPacingProfile('balanced')
 }
 </script>
 
@@ -757,15 +789,83 @@ function resetThresholdsToDefaults() {
           </span>
         </div>
 
-        <FieldRange
-          v-model="pacingMaxFillerSynthesisBudgetMs"
-          label="Filler synthesis budget (ms)"
-          description="Maximum wait to generate an uncached filler phrase. Default: 2500ms."
-          :format-value="value => `${value}ms`"
-          :min="100"
-          :max="5000"
-          :step="100"
-        />
+        <!-- 1-Click Pacing Profiles Presets -->
+        <div class="border border-neutral-200/80 rounded-xl bg-white p-4 shadow-sm dark:border-neutral-700/80 dark:bg-neutral-900/60">
+          <div class="mb-2 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="i-solar:slider-vertical-bold-duotone text-base text-primary-500" />
+              <h4 class="text-xs text-neutral-800 font-semibold tracking-wider uppercase dark:text-neutral-200">
+                Pacing Profile Presets
+              </h4>
+            </div>
+            <span
+              v-if="currentDetectedProfile === 'custom'"
+              class="border border-amber-300/40 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-600 font-semibold tracking-wider uppercase dark:border-amber-700/40 dark:bg-amber-400/15 dark:text-amber-300"
+            >
+              Customized
+            </span>
+            <span
+              v-else
+              class="border border-primary-200 rounded-full bg-primary-50/60 px-2 py-0.5 text-[10px] text-primary-700 font-semibold tracking-wider uppercase dark:border-primary-800 dark:bg-primary-950/60 dark:text-primary-300"
+            >
+              Preset Active
+            </span>
+          </div>
+          <p class="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+            Select a calibrated profile to tune timing deadlines, audio duration ceilings, and dynamic aside budgets for your model's thinking speed.
+          </p>
+
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <button
+              v-for="profile in PACING_PROFILES"
+              :key="profile.id"
+              type="button"
+              :class="[
+                'group relative flex flex-col p-3.5 rounded-xl border text-left transition-all duration-200 cursor-pointer',
+                currentDetectedProfile === profile.id
+                  ? 'border-primary-500 bg-primary-50/50 dark:bg-primary-950/30 ring-2 ring-primary-500/20'
+                  : 'border-neutral-200/80 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-950/30 hover:border-neutral-300 dark:hover:border-neutral-700 hover:bg-neutral-100/50 dark:hover:bg-neutral-900/50',
+              ]"
+              @click="applyPacingProfile(profile.id)"
+            >
+              <div class="mb-1.5 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <div
+                    :class="[
+                      profile.icon,
+                      'text-lg',
+                      currentDetectedProfile === profile.id ? 'text-primary-600 dark:text-primary-400' : 'text-neutral-500 dark:text-neutral-400 group-hover:text-primary-500',
+                    ]"
+                  />
+                  <span class="text-xs text-neutral-800 font-semibold dark:text-neutral-200">
+                    {{ profile.label }}
+                  </span>
+                </div>
+                <span
+                  v-if="currentDetectedProfile === profile.id"
+                  class="i-solar:check-circle-bold text-sm text-primary-600 dark:text-primary-400"
+                />
+              </div>
+              <span class="mb-1 text-[11px] text-primary-600 font-medium dark:text-primary-400">
+                {{ profile.subtitle }}
+              </span>
+              <p class="line-clamp-2 text-[11px] text-neutral-500 leading-tight dark:text-neutral-400">
+                {{ profile.targetTurnDescription }}
+              </p>
+              <div class="mt-2.5 flex flex-wrap gap-1.5 border-t border-neutral-200/60 pt-2 text-[10px] text-neutral-500 dark:border-neutral-800/60 dark:text-neutral-400">
+                <span class="rounded bg-neutral-200/60 px-1.5 py-0.5 font-mono dark:bg-neutral-800/60">
+                  Max: &le;{{ (profile.settings.maxFillerDurationMs / 1000).toFixed(1) }}s
+                </span>
+                <span class="rounded bg-neutral-200/60 px-1.5 py-0.5 font-mono dark:bg-neutral-800/60">
+                  Int: {{ (profile.settings.pacingIntervalMs / 1000).toFixed(0) }}s
+                </span>
+                <span class="rounded bg-neutral-200/60 px-1.5 py-0.5 font-mono dark:bg-neutral-800/60">
+                  Budget: {{ profile.settings.maxSynthesisBudgetMs }}ms
+                </span>
+              </div>
+            </button>
+          </div>
+        </div>
 
         <!-- Speech Style & Pacing Instructions Scratchpad -->
         <div class="border border-neutral-200 rounded-xl bg-white p-4 shadow-sm dark:border-neutral-700 dark:bg-neutral-900/60">
@@ -1031,14 +1131,14 @@ function resetThresholdsToDefaults() {
                   v-model.number="pacingCandidateTtlMs"
                   type="range"
                   min="5000"
-                  max="30000"
+                  max="45000"
                   step="1000"
                   class="h-1.5 w-full cursor-pointer accent-primary-500"
                 >
                 <div class="flex items-center justify-between text-[10px] text-neutral-400">
                   <span>5s (Fresh)</span>
                   <span>15s (Default)</span>
-                  <span>30s (Long)</span>
+                  <span>45s (Extended)</span>
                 </div>
               </div>
 
@@ -1059,14 +1159,14 @@ function resetThresholdsToDefaults() {
                   v-model.number="pacingMaxSynthesisBudgetMs"
                   type="range"
                   min="200"
-                  max="5000"
+                  max="6000"
                   step="50"
                   class="h-1.5 w-full cursor-pointer accent-primary-500"
                 >
                 <div class="flex items-center justify-between text-[10px] text-neutral-400">
                   <span>200ms</span>
                   <span>3200ms (Default)</span>
-                  <span>5000ms</span>
+                  <span>6000ms (Deep CoT)</span>
                 </div>
               </div>
             </div>
@@ -1162,14 +1262,14 @@ function resetThresholdsToDefaults() {
                 v-model.number="pacingMaxFillerDurationMs"
                 type="range"
                 min="800"
-                max="4000"
+                max="6000"
                 step="50"
                 class="h-1.5 w-full cursor-pointer accent-primary-500"
               >
               <div class="flex items-center justify-between text-[10px] text-neutral-400">
                 <span>800ms (Snappy)</span>
                 <span>3000ms (Default)</span>
-                <span>4000ms (Spacious)</span>
+                <span>6000ms (Deep CoT)</span>
               </div>
             </div>
 

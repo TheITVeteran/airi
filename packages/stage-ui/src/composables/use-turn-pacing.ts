@@ -122,6 +122,7 @@ export function useTurnPacing(options: UseTurnPacingOptions) {
       candidateTtlMs: pacingConfig.candidateTtlMs ?? 15000,
       maxFillerSynthesisBudgetMs: pacingConfig.maxFillerSynthesisBudgetMs ?? 3200,
       maxSynthesisBudgetMs: pacingConfig.maxSynthesisBudgetMs ?? 3200,
+      pacingProfile: pacingConfig.pacingProfile,
       experimentalOrganicPivots: pacingConfig.experimentalOrganicPivots ?? false,
     }
 

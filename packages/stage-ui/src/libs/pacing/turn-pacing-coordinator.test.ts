@@ -2,6 +2,7 @@ import type { AsideCandidate, Clock, PacingPolicyConfig } from '../../types/paci
 
 import { describe, expect, it, vi } from 'vitest'
 
+import { detectActivePacingProfile, PACING_PROFILES } from '../../types/pacing'
 import { TurnPacingCoordinator } from './turn-pacing-coordinator'
 
 class VirtualClock implements Clock {
@@ -1044,6 +1045,68 @@ describe('turnPacingCoordinator (Phase 0)', () => {
         3200,
       )
       expect(coordinator.metrics.dynamicCueSource).toBe('organic')
+    })
+  })
+
+  describe('phase 7: Calibrated Pacing Profiles', () => {
+    it('applies deep_cot profile with 5000ms synthesis budget and handles meaty multi-word CoT pivots', () => {
+      const clock = new VirtualClock()
+      const onArmDynamicAside = vi.fn()
+
+      const coordinator = new TurnPacingCoordinator({
+        turnId: 'turn-deepcot-test',
+        generation: 1,
+        providerKey: 'kimi-k3',
+        policy: {
+          ...defaultPolicy,
+          ...PACING_PROFILES.deep_cot.settings,
+        },
+        clock,
+        onArmDynamicAside,
+      })
+
+      coordinator.dispatch()
+
+      // Initial filler
+      clock.advance(1800)
+      expect(coordinator.state).toBe('FILLER_ARMED')
+      coordinator.notifyFillerAudioStarted(clock.now())
+      clock.advance(1200)
+      coordinator.notifyFillerAudioEnded(clock.now())
+      expect(coordinator.state).toBe('STAGING')
+
+      // Advance to 17000ms and submit 8-word meaty academic aside
+      clock.advance(14000) // now at 17000ms
+      coordinator.submitAsideCandidate({
+        cueId: 'needle-deepcot-1',
+        turn: { turnId: 'turn-deepcot-test', generation: 1 },
+        source: 'organic',
+        text: 'Actually Miklósi\'s study on cat-human attachment shows...',
+        phraseKey: 'needle-deepcot-1',
+        collectedAtMs: clock.now(),
+        expiresAtMs: clock.now() + 20000,
+      })
+
+      // Advance past deep_cot interval (18000ms)
+      clock.advance(5000) // now at 22000ms
+
+      expect(coordinator.state).toBe('FILLER_ARMED')
+      expect(onArmDynamicAside).toHaveBeenCalledTimes(1)
+      expect(onArmDynamicAside).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: 'Actually Miklósi\'s study on cat-human attachment shows...',
+          source: 'organic',
+        }),
+        5000, // 5000ms synthesis budget for deep_cot!
+      )
+      expect(coordinator.metrics.dynamicCueSource).toBe('organic')
+    })
+
+    it('detectActivePacingProfile correctly identifies preset vs custom', () => {
+      expect(detectActivePacingProfile(PACING_PROFILES.snappy.settings)).toBe('snappy')
+      expect(detectActivePacingProfile(PACING_PROFILES.balanced.settings)).toBe('balanced')
+      expect(detectActivePacingProfile(PACING_PROFILES.deep_cot.settings)).toBe('deep_cot')
+      expect(detectActivePacingProfile({ ...PACING_PROFILES.balanced.settings, maxFillerDurationMs: 9999 })).toBe('custom')
     })
   })
 })

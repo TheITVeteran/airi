@@ -123,7 +123,113 @@ export interface PacingPolicyConfig {
   candidateTtlMs?: number
   maxFillerSynthesisBudgetMs?: number
   maxSynthesisBudgetMs?: number
+  pacingProfile?: PacingProfileId
   experimentalOrganicPivots?: boolean
+}
+
+export type PacingProfileId = 'snappy' | 'balanced' | 'deep_cot' | 'custom'
+
+export interface PacingProfileSettings {
+  armMinMs: number
+  armMaxMs: number
+  maxFillerDurationMs: number
+  pacingIntervalMs: number
+  maxFillersPerTurn: number
+  maxSynthesisBudgetMs: number
+  maxFillerSynthesisBudgetMs: number
+  dynamicAsidesEnabled: boolean
+  semanticExtractorEnabled: boolean
+  dynamicAfterMs: number
+  candidateTtlMs: number
+}
+
+export interface PacingProfileConfig {
+  id: Exclude<PacingProfileId, 'custom'>
+  label: string
+  subtitle: string
+  icon: string
+  targetTurnDescription: string
+  settings: PacingProfileSettings
+}
+
+export const PACING_PROFILES: Record<Exclude<PacingProfileId, 'custom'>, PacingProfileConfig> = {
+  snappy: {
+    id: 'snappy',
+    label: 'Snappy Chat',
+    subtitle: 'Fast 2–5s TTFT',
+    icon: 'i-solar:bolt-bold-duotone',
+    targetTurnDescription: 'Standard chat models, fast banter (Gemini Flash, Haiku, small local LLMs)',
+    settings: {
+      armMinMs: 800,
+      armMaxMs: 2500,
+      maxFillerDurationMs: 1800,
+      pacingIntervalMs: 8000,
+      maxFillersPerTurn: 2,
+      maxSynthesisBudgetMs: 2000,
+      maxFillerSynthesisBudgetMs: 2000,
+      dynamicAsidesEnabled: false,
+      semanticExtractorEnabled: false,
+      dynamicAfterMs: 8000,
+      candidateTtlMs: 8000,
+    },
+  },
+  balanced: {
+    id: 'balanced',
+    label: 'Balanced',
+    subtitle: 'Everyday 10–25s CoT',
+    icon: 'i-solar:scale-bold-duotone',
+    targetTurnDescription: 'Everyday reasoning models (DeepSeek 4 Pro, GPT-4o, Sonnet 3.5, Gemini Pro)',
+    settings: {
+      armMinMs: 1200,
+      armMaxMs: 3500,
+      maxFillerDurationMs: 3000,
+      pacingIntervalMs: 15000,
+      maxFillersPerTurn: 3,
+      maxSynthesisBudgetMs: 3200,
+      maxFillerSynthesisBudgetMs: 3200,
+      dynamicAsidesEnabled: true,
+      semanticExtractorEnabled: true,
+      dynamicAfterMs: 15000,
+      candidateTtlMs: 15000,
+    },
+  },
+  deep_cot: {
+    id: 'deep_cot',
+    label: 'Deep CoT Explorer',
+    subtitle: 'Extended 40–90s CoT',
+    icon: 'i-solar:atom-bold-duotone',
+    targetTurnDescription: 'Heavy chain-of-thought models (Kimi k3, DeepSeek R1, Glyph Deep CoT)',
+    settings: {
+      armMinMs: 1500,
+      armMaxMs: 4000,
+      maxFillerDurationMs: 4800,
+      pacingIntervalMs: 18000,
+      maxFillersPerTurn: 5,
+      maxSynthesisBudgetMs: 5000,
+      maxFillerSynthesisBudgetMs: 5000,
+      dynamicAsidesEnabled: true,
+      semanticExtractorEnabled: true,
+      dynamicAfterMs: 15000,
+      candidateTtlMs: 20000,
+    },
+  },
+}
+
+export function detectActivePacingProfile(settings: Partial<PacingProfileSettings>): PacingProfileId {
+  for (const profile of Object.values(PACING_PROFILES)) {
+    const s = profile.settings
+    if (
+      settings.maxFillerDurationMs === s.maxFillerDurationMs
+      && settings.pacingIntervalMs === s.pacingIntervalMs
+      && settings.maxFillersPerTurn === s.maxFillersPerTurn
+      && settings.maxSynthesisBudgetMs === s.maxSynthesisBudgetMs
+      && settings.dynamicAsidesEnabled === s.dynamicAsidesEnabled
+      && settings.semanticExtractorEnabled === s.semanticExtractorEnabled
+    ) {
+      return profile.id
+    }
+  }
+  return 'custom'
 }
 
 export interface ThinkingFillerPhrase {
@@ -160,5 +266,6 @@ export const DEFAULT_PACING_POLICY: PacingPolicyConfig = {
   candidateTtlMs: 15000,
   maxFillerSynthesisBudgetMs: 3200,
   maxSynthesisBudgetMs: 3200,
+  pacingProfile: 'balanced',
   experimentalOrganicPivots: false,
 }
