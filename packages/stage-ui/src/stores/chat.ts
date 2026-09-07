@@ -1414,7 +1414,10 @@ You must now react to this outcome and provide a rich, narrative-driven climax r
             try {
               const firstHopProvider = await providersStore.getProviderInstance(firstHopProviderId)
               const firstHopConfig = providersStore.getProviderConfig(firstHopProviderId)
-              const headers = (firstHopConfig?.headers || {}) as Record<string, string>
+              const headers = { ...firstHopConfig?.headers } as Record<string, string>
+              if (firstHopProviderId === 'opencode-go' && sessionId && !headers['x-opencode-session']) {
+                headers['x-opencode-session'] = sessionId
+              }
 
               // Build the output guidance instructions for the 1st-Hop LLM
               let firstHopSystemPrompt = ''
@@ -1500,7 +1503,10 @@ Format your output as a raw thought log.`
         await hooks.emitAfterMessageComposedHooks(sendingMessage, streamingMessageContext)
         await hooks.emitBeforeSendHooks(sendingMessage, streamingMessageContext)
 
-        const headers = (effectiveConfig?.headers || {}) as Record<string, string>
+        const headers = { ...effectiveConfig?.headers } as Record<string, string>
+        if (effectiveProviderId === 'opencode-go' && sessionId && !headers['x-opencode-session']) {
+          headers['x-opencode-session'] = sessionId
+        }
         const generationConfig = activeCard.value?.extensions?.airi?.generation
         const generationKnown = generationConfig?.enabled ? generationConfig.known : undefined
         const abortController = new AbortController()

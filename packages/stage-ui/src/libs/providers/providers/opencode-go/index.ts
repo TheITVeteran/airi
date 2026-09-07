@@ -1,4 +1,6 @@
 import { createOpenAI } from '@xsai-ext/providers/create'
+import { nanoid } from 'nanoid'
+import { getActivePinia } from 'pinia'
 import { z } from 'zod'
 
 import { createOpenAICompatibleValidators } from '../../validators/openai-compatible'
@@ -13,6 +15,32 @@ const openCodeGoConfigSchema = z.object({
 })
 
 type OpenCodeGoConfig = z.input<typeof openCodeGoConfigSchema>
+
+function getFallbackSessionId(): string {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    let id = window.localStorage.getItem('opencode_session_id')
+    if (!id) {
+      id = `airi-${nanoid()}`
+      window.localStorage.setItem('opencode_session_id', id)
+    }
+    return id
+  }
+  return 'airi-default-session'
+}
+
+export function resolveOpenCodeSessionId(): string {
+  try {
+    const pinia = getActivePinia()
+    if (pinia) {
+      const sessionStore = (pinia as any)._s?.get('chat-session') as any
+      if (sessionStore?.activeSessionId) {
+        return sessionStore.activeSessionId
+      }
+    }
+  }
+  catch {}
+  return getFallbackSessionId()
+}
 
 export const providerOpenCodeGo = defineProvider<OpenCodeGoConfig>({
   id: 'opencode-go',
@@ -42,7 +70,47 @@ export const providerOpenCodeGo = defineProvider<OpenCodeGoConfig>({
     }),
   }),
   createProvider(config) {
-    return createOpenAI(config.apiKey, config.baseUrl)
+    const provider = createOpenAI(config.apiKey, config.baseUrl) as any
+
+    const customFetch: typeof fetch = async (input, init) => {
+      const headers = new Headers(init?.headers)
+      if (input instanceof Request) {
+        input.headers.forEach((value, key) => {
+          if (!headers.has(key)) {
+            headers.set(key, value)
+          }
+        })
+      }
+
+      if (!headers.has('x-opencode-session')) {
+        headers.set('x-opencode-session', resolveOpenCodeSessionId())
+      }
+
+      if (input instanceof Request) {
+        return fetch(new Request(input, { headers }))
+      }
+
+      return fetch(input, { ...init, headers })
+    }
+
+    return {
+      ...provider,
+      chat: (...args: any[]) => {
+        const chatObj = provider.chat(...args)
+        return {
+          ...chatObj,
+          headers: {
+            ...chatObj.headers,
+            'x-opencode-session': resolveOpenCodeSessionId(),
+          },
+          fetch: customFetch,
+        }
+      },
+      model: (...args: any[]) => ({
+        ...provider.model(...args),
+        fetch: customFetch,
+      }),
+    }
   },
 
   validationRequiredWhen(config) {
@@ -51,6 +119,9 @@ export const providerOpenCodeGo = defineProvider<OpenCodeGoConfig>({
   validators: {
     ...createOpenAICompatibleValidators({
       checks: ['connectivity', 'model_list'],
+      additionalHeaders: {
+        'x-opencode-session': resolveOpenCodeSessionId(),
+      },
     }),
   },
 })

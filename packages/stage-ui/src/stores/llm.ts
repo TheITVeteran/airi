@@ -493,7 +493,10 @@ async function streamFrom(model: string, chatProvider: ChatProvider, messages: M
         },
         maxSteps: 10,
         messages: sanitized,
-        headers,
+        headers: {
+          ...(chatConfig.headers as Record<string, string> | undefined),
+          ...headers,
+        },
         temperature: options?.temperature,
         top_p: options?.top_p,
         max_tokens: options?.max_tokens,
@@ -582,7 +585,10 @@ async function generateFrom(model: string, chatProvider: ChatProvider, messages:
     ...requestOverrides,
     maxSteps: 10,
     messages: sanitized,
-    headers,
+    headers: {
+      ...(chatConfig.headers as Record<string, string> | undefined),
+      ...headers,
+    },
     temperature: options?.temperature,
     top_p: options?.top_p,
     max_tokens: options?.max_tokens,
