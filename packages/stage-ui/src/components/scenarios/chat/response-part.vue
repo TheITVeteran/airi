@@ -175,60 +175,6 @@ const durationDisplay = computed(() => {
   return ''
 })
 
-const snippetContainerRef = ref<HTMLElement | null>(null)
-const snippetTrackRef = ref<HTMLElement | null>(null)
-const { width: containerWidth } = useElementSize(snippetContainerRef)
-const { width: trackWidth } = useElementSize(snippetTrackRef)
-// Measurement only controls the fade; CSS owns the width and keeps the tail visible.
-const snippetOverflows = computed(() => containerWidth.value > 0 && trackWidth.value > containerWidth.value + 1)
-
-const cleanFullReasoning = computed(() => {
-  const raw = props.message.categorization?.reasoning?.trim() || ''
-  if (!raw) {
-    return ''
-  }
-  return raw.replace(/<\/?think_aloud(?:\s[^>]*)?>/gi, '').replace(/\s+/g, ' ').trim()
-})
-
-const reasoningSnippet = computed(() => cleanFullReasoning.value || t('stage.chat.reasoning'))
-
-function toggleExpanded() {
-  isExpanded.value = !isExpanded.value
-}
-
-function scrollToBottom() {
-  if (scrollContainerRef.value) {
-    scrollContainerRef.value.scrollTop = scrollContainerRef.value.scrollHeight
-  }
-}
-
-watch(() => props.message.categorization?.reasoning, () => {
-  if (isExpanded.value) {
-    nextTick(scrollToBottom)
-  }
-})
-
-watch(() => pacingStateLog.value.length, () => {
-  if (isExpanded.value) {
-    nextTick(() => {
-      if (pacingLedgerContainerRef.value) {
-        pacingLedgerContainerRef.value.scrollTop = pacingLedgerContainerRef.value.scrollHeight
-      }
-    })
-  }
-})
-
-watch(isExpanded, (expanded) => {
-  if (expanded) {
-    nextTick(() => {
-      scrollToBottom()
-      if (pacingLedgerContainerRef.value) {
-        pacingLedgerContainerRef.value.scrollTop = pacingLedgerContainerRef.value.scrollHeight
-      }
-    })
-  }
-})
-
 interface ReasoningSegment {
   type: 'text' | 'think_aloud'
   content: string
@@ -276,6 +222,218 @@ const reasoningSegments = computed<ReasoningSegment[]>(() => {
 })
 
 const thinkAloudCount = computed(() => reasoningSegments.value.filter(s => s.type === 'think_aloud').length)
+
+const cleanFullReasoning = computed(() => {
+  const raw = props.message.categorization?.reasoning?.trim() || ''
+  if (!raw) {
+    return ''
+  }
+  return raw.replace(/<\/?think_aloud(?:\s[^>]*)?>/gi, '').replace(/\s+/g, ' ').trim()
+})
+
+const snippetContainerRef = ref<HTMLElement | null>(null)
+const snippetTrackRef = ref<HTMLElement | null>(null)
+const { width: containerWidth } = useElementSize(snippetContainerRef)
+const { width: trackWidth } = useElementSize(snippetTrackRef)
+
+const maxCharsInView = computed(() => Math.max(25, Math.floor((containerWidth.value || 320) / 7)))
+
+const displayedSnippet = ref<string>('')
+const activeSalienceSpan = ref<string | null>(null)
+const salienceSource = ref<'ambient' | 'think_aloud' | 'heuristic'>('ambient')
+const salienceHoldUntil = ref<number>(0)
+const ambientCharIndex = ref<number>(0)
+const lastSalienceKey = ref<string>('')
+
+const salienceKey = computed(() => {
+  if (activeSalienceSpan.value) {
+    return `salient-${lastSalienceKey.value}`
+  }
+  return 'ambient'
+})
+
+const isThinking = computed(() => {
+  return isStreamingThisMessage.value && !hasContentText.value
+})
+
+function findLatestHeuristicPivot(text: string): string | null {
+  const regex = /(?:^|[.!?\n]\s*)(Wait(?:,|\s-\s|\.\.\.)|Actually(?:,|\s-\s|\.\.\.)|Let me (?:check|rethink|calculate|revisit|think back)|Key insight:|Hold on,|The trick is|In conclusion|Therefore,)([^.!?\n]{8,90}[.!?]?)/gi
+  let lastMatch: string | null = null
+  let m: RegExpExecArray | null
+  while ((m = regex.exec(text)) !== null) {
+    if (m[0]) {
+      lastMatch = m[0].trim()
+    }
+  }
+  return lastMatch
+}
+
+function checkForSalience() {
+  // 1. Spoken <think_aloud> has highest priority
+  const thinkAloudSegments = reasoningSegments.value.filter(s => s.type === 'think_aloud' && s.content.trim())
+  if (thinkAloudSegments.length > 0) {
+    const latest = thinkAloudSegments[thinkAloudSegments.length - 1]
+    const trimmed = latest.content.trim()
+    if (trimmed) {
+      if (trimmed !== lastSalienceKey.value) {
+        lastSalienceKey.value = trimmed
+        activeSalienceSpan.value = trimmed
+        salienceSource.value = 'think_aloud'
+        salienceHoldUntil.value = Date.now() + 3200
+        displayedSnippet.value = trimmed
+        const idx = cleanFullReasoning.value.indexOf(trimmed)
+        if (idx !== -1) {
+          ambientCharIndex.value = Math.max(ambientCharIndex.value, idx + trimmed.length)
+        }
+        return
+      }
+      else if (activeSalienceSpan.value === trimmed && Date.now() < salienceHoldUntil.value) {
+        displayedSnippet.value = trimmed
+        return
+      }
+    }
+  }
+
+  // If already holding an active salient thought, protect it from heuristic interruption
+  if (activeSalienceSpan.value && Date.now() < salienceHoldUntil.value) {
+    return
+  }
+
+  // 2. Heuristic cognitive inflection needles
+  const fullText = cleanFullReasoning.value
+  if (!fullText)
+    return
+
+  const latestPivot = findLatestHeuristicPivot(fullText)
+  if (latestPivot && latestPivot !== lastSalienceKey.value) {
+    lastSalienceKey.value = latestPivot
+    activeSalienceSpan.value = latestPivot
+    salienceSource.value = 'heuristic'
+    salienceHoldUntil.value = Date.now() + 2500
+    displayedSnippet.value = latestPivot
+    const idx = fullText.indexOf(latestPivot)
+    if (idx !== -1) {
+      ambientCharIndex.value = Math.max(ambientCharIndex.value, idx + latestPivot.length)
+    }
+  }
+}
+
+const { pause: stopSnippetTicker, resume: startSnippetTicker } = useIntervalFn(() => {
+  if (!isThinking.value) {
+    return
+  }
+
+  const fullText = cleanFullReasoning.value
+  if (!fullText) {
+    displayedSnippet.value = ''
+    return
+  }
+
+  checkForSalience()
+
+  if (activeSalienceSpan.value && Date.now() < salienceHoldUntil.value) {
+    displayedSnippet.value = activeSalienceSpan.value
+    return
+  }
+
+  if (activeSalienceSpan.value && Date.now() >= salienceHoldUntil.value) {
+    activeSalienceSpan.value = null
+    salienceSource.value = 'ambient'
+  }
+
+  if (ambientCharIndex.value < fullText.length) {
+    ambientCharIndex.value++
+  }
+
+  const maxChars = maxCharsInView.value
+  if (ambientCharIndex.value <= maxChars) {
+    displayedSnippet.value = fullText.slice(0, ambientCharIndex.value)
+  }
+  else {
+    const startChar = ambientCharIndex.value - maxChars
+    displayedSnippet.value = fullText.slice(startChar, ambientCharIndex.value)
+  }
+}, 50, { immediate: false })
+
+watch(isThinking, (thinking) => {
+  if (thinking) {
+    ambientCharIndex.value = 0
+    activeSalienceSpan.value = null
+    lastSalienceKey.value = ''
+    salienceHoldUntil.value = 0
+    displayedSnippet.value = ''
+    startSnippetTicker()
+  }
+  else {
+    stopSnippetTicker()
+    if (!displayedSnippet.value && cleanFullReasoning.value) {
+      displayedSnippet.value = cleanFullReasoning.value.slice(0, maxCharsInView.value)
+    }
+  }
+}, { immediate: true })
+
+watch(cleanFullReasoning, (newVal) => {
+  if (!isThinking.value && newVal && !displayedSnippet.value) {
+    displayedSnippet.value = newVal.slice(0, maxCharsInView.value)
+  }
+}, { immediate: true })
+
+const snippetMaskStyle = computed(() => {
+  if (activeSalienceSpan.value) {
+    return trackWidth.value > containerWidth.value
+      ? { maskImage: 'linear-gradient(to left, transparent, black 1.5rem)' }
+      : undefined
+  }
+  const isScrolling = ambientCharIndex.value > maxCharsInView.value
+  const hasMoreAhead = ambientCharIndex.value < cleanFullReasoning.value.length
+  if (isScrolling && hasMoreAhead) {
+    return { maskImage: 'linear-gradient(to right, transparent, black 1rem, black calc(100% - 1.5rem), transparent)' }
+  }
+  if (isScrolling) {
+    return { maskImage: 'linear-gradient(to right, transparent, black 1rem)' }
+  }
+  if (hasMoreAhead || trackWidth.value > containerWidth.value) {
+    return { maskImage: 'linear-gradient(to left, transparent, black 1.5rem)' }
+  }
+  return undefined
+})
+
+function toggleExpanded() {
+  isExpanded.value = !isExpanded.value
+}
+
+function scrollToBottom() {
+  if (scrollContainerRef.value) {
+    scrollContainerRef.value.scrollTop = scrollContainerRef.value.scrollHeight
+  }
+}
+
+watch(() => props.message.categorization?.reasoning, () => {
+  if (isExpanded.value) {
+    nextTick(scrollToBottom)
+  }
+})
+
+watch(() => pacingStateLog.value.length, () => {
+  if (isExpanded.value) {
+    nextTick(() => {
+      if (pacingLedgerContainerRef.value) {
+        pacingLedgerContainerRef.value.scrollTop = pacingLedgerContainerRef.value.scrollHeight
+      }
+    })
+  }
+})
+
+watch(isExpanded, (expanded) => {
+  if (expanded) {
+    nextTick(() => {
+      scrollToBottom()
+      if (pacingLedgerContainerRef.value) {
+        pacingLedgerContainerRef.value.scrollTop = pacingLedgerContainerRef.value.scrollHeight
+      }
+    })
+  }
+})
 </script>
 
 <template>
@@ -298,7 +456,7 @@ const thinkAloudCount = computed(() => reasoningSegments.value.filter(s => s.typ
           class="i-solar:lightbulb-bolt-bold-duotone size-3.5 shrink-0 text-amber-500 dark:text-amber-400"
           :class="{ 'animate-pulse': isStreamingThisMessage && !hasContentText }"
         />
-        <!-- Collapsed: 1-line dynamic tail-chasing text preview -->
+        <!-- Collapsed: 1-line dynamic ambient crawl & salience snap preview -->
         <span
           v-show="!isExpanded"
           ref="snippetContainerRef"
@@ -306,11 +464,24 @@ const thinkAloudCount = computed(() => reasoningSegments.value.filter(s => s.typ
             'relative h-4 min-w-0 flex-1 overflow-hidden',
             'text-[11px] text-neutral-600 leading-4 font-mono italic dark:text-neutral-350',
           ]"
-          :style="snippetOverflows ? { maskImage: 'linear-gradient(to right, transparent, black 1rem)' } : undefined"
-          :title="cleanFullReasoning || reasoningSnippet"
+          :style="snippetMaskStyle"
+          :title="cleanFullReasoning || displayedSnippet"
         >
-          <!-- Out of flow so the full stream cannot determine the bubble's intrinsic width. -->
-          <span ref="snippetTrackRef" class="absolute right-0 top-0 min-w-full w-max whitespace-nowrap text-left">{{ reasoningSnippet }}</span>
+          <Transition name="snippet-fade" mode="out-in">
+            <span
+              :key="salienceKey"
+              ref="snippetTrackRef"
+              class="absolute left-0 top-0 min-w-full w-max whitespace-nowrap text-left"
+            >
+              <span v-if="salienceSource === 'think_aloud'" class="mr-1 inline-flex items-center text-amber-500 font-semibold font-sans not-italic">
+                🎙️
+              </span>
+              <span v-else-if="salienceSource === 'heuristic'" class="mr-1 inline-flex items-center text-primary-500 font-semibold font-sans not-italic">
+                💡
+              </span>
+              {{ displayedSnippet || cleanFullReasoning || t('stage.chat.reasoning') }}
+            </span>
+          </Transition>
         </span>
         <!-- Expanded: hide repetitive preview, show label and optional metrics -->
         <span
@@ -393,3 +564,20 @@ const thinkAloudCount = computed(() => reasoningSegments.value.filter(s => s.typ
     </div>
   </div>
 </template>
+
+<style scoped>
+.snippet-fade-enter-active,
+.snippet-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.snippet-fade-enter-from {
+  opacity: 0;
+  transform: translateY(2px);
+}
+
+.snippet-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-2px);
+}
+</style>
