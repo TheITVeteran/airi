@@ -1607,10 +1607,10 @@ chatHookCleanups.push(onBeforeMessageComposed(async (_message, context) => {
   ensureSpeechIntent()
 }))
 
-chatHookCleanups.push(onBeforeSend(async (_message, context) => {
+chatHookCleanups.push(onBeforeSend(async (message, context) => {
   live2dStore.triggerMotion(EmotionThinkMotionName)
   currentMotion.value = { group: EmotionThinkMotionName }
-  turnPacing.startTurn(context?.assistantMessageId || `turn-${Date.now()}`, context)
+  turnPacing.startTurn(context?.assistantMessageId || `turn-${Date.now()}`, context, message)
 }))
 
 chatHookCleanups.push(onReasoningChunk(async (chunk: string) => {

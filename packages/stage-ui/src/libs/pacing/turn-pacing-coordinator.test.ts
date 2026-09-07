@@ -951,5 +951,99 @@ describe('turnPacingCoordinator (Phase 0)', () => {
       expect(lastLog?.event).toContain('[synthesis_timeout · 2500ms]')
       expect(lastLog?.details).toContain('Dynamic synthesis timed out after 2500ms ➔ +5s')
     })
+
+    it('arms dynamic aside candidate on initial deadline if present (Task 2 fast-path probe)', () => {
+      const clock = new VirtualClock()
+      const onArmDynamicAside = vi.fn()
+      const onArmFiller = vi.fn()
+
+      const coordinator = new TurnPacingCoordinator({
+        turnId: 'turn-task2-test',
+        generation: 1,
+        providerKey: 'test-provider',
+        policy: { ...defaultPolicy, semanticExtractorEnabled: true },
+        clock,
+        onArmDynamicAside,
+        onArmFiller,
+      })
+
+      coordinator.dispatch()
+      expect(coordinator.state).toBe('STAGING')
+
+      // Task 2: Needle delivers dynamic reaction before deadline
+      coordinator.submitAsideCandidate({
+        cueId: 'needle-cand-1',
+        turn: { turnId: 'turn-task2-test', generation: 1 },
+        source: 'organic',
+        text: 'Let me see what we have here...',
+        phraseKey: 'needle-cand-1',
+        collectedAtMs: clock.now(),
+        expiresAtMs: clock.now() + 15000,
+      })
+
+      // Advance to deadline
+      clock.advance(1800)
+
+      expect(coordinator.state).toBe('FILLER_ARMED')
+      expect(onArmDynamicAside).toHaveBeenCalledTimes(1)
+      expect(onArmDynamicAside).toHaveBeenCalledWith(
+        expect.objectContaining({ text: 'Let me see what we have here...', source: 'organic' }),
+        3200,
+      )
+      expect(onArmFiller).not.toHaveBeenCalled()
+      expect(coordinator.metrics.dynamicCueSource).toBe('organic')
+    })
+
+    it('arms organic pivot candidate on interval flush when semanticExtractorEnabled is true (Task 3)', () => {
+      const clock = new VirtualClock()
+      const onArmDynamicAside = vi.fn()
+
+      const coordinator = new TurnPacingCoordinator({
+        turnId: 'turn-task3-test',
+        generation: 1,
+        providerKey: 'test-provider',
+        policy: {
+          ...defaultPolicy,
+          semanticExtractorEnabled: true,
+          dynamicAfterMs: 15000,
+          pacingIntervalMs: 15000,
+        },
+        clock,
+        onArmDynamicAside,
+      })
+
+      coordinator.dispatch()
+
+      // Initial filler elapses and finishes
+      clock.advance(1800)
+      expect(coordinator.state).toBe('FILLER_ARMED')
+      coordinator.notifyFillerAudioStarted(clock.now())
+      clock.advance(1200)
+      coordinator.notifyFillerAudioEnded(clock.now())
+      expect(coordinator.state).toBe('STAGING')
+
+      // Advance to 14000ms, streaming reasoning and Needle extracting a pivot
+      clock.advance(12200) // now at 14000ms
+      coordinator.submitAsideCandidate({
+        cueId: 'needle-pivot-1',
+        turn: { turnId: 'turn-task3-test', generation: 1 },
+        source: 'organic',
+        text: 'Wait, that means the formula is reversed...',
+        phraseKey: 'needle-pivot-1',
+        collectedAtMs: clock.now(),
+        expiresAtMs: clock.now() + 15000,
+      })
+
+      // Advance past 15000ms interval
+      clock.advance(2800) // now at 16800ms (15s elapsed since initial filler)
+
+      expect(coordinator.state).toBe('FILLER_ARMED')
+      expect(onArmDynamicAside).toHaveBeenCalledTimes(1)
+      expect(onArmDynamicAside).toHaveBeenCalledWith(
+        expect.objectContaining({ text: 'Wait, that means the formula is reversed...', source: 'organic' }),
+        3200,
+      )
+      expect(coordinator.metrics.dynamicCueSource).toBe('organic')
+    })
   })
 })

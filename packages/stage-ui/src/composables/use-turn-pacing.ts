@@ -8,6 +8,7 @@ import type { AsideCandidate, PacingMetrics, PacingPolicyConfig } from '../types
 import { useBroadcastChannel, useLocalStorage } from '@vueuse/core'
 import { readonly, ref, toRaw } from 'vue'
 
+import { needleClient } from '../libs/inference/adapters/needle-client'
 import { createThinkingAudioFingerprintParams } from '../libs/pacing/pacing-cache'
 import { PacingPlaybackBridge, resolveFillerCandidate } from '../libs/pacing/pacing-playback-bridge'
 import { TurnPacingCoordinator } from '../libs/pacing/turn-pacing-coordinator'
@@ -57,14 +58,18 @@ export function useTurnPacing(options: UseTurnPacingOptions) {
   let activeBridge: PacingPlaybackBridge<AudioBuffer> | null = null
   let currentGeneration = 0
   let countdownTimer: any = null
+  let activeReasoningBuffer = ''
+  let lastCotExtractionAtMs = 0
 
-  function startTurn(turnId: string, _context?: ChatStreamEventContext): TurnPacingCoordinator | null {
+  function startTurn(turnId: string, context?: ChatStreamEventContext, userPrompt?: string): TurnPacingCoordinator | null {
     if (countdownTimer) {
       clearInterval(countdownTimer)
       countdownTimer = null
     }
 
     cancel('new-turn')
+    activeReasoningBuffer = ''
+    lastCotExtractionAtMs = 0
 
     const pacingConfig = activeCard.value?.extensions?.airi?.acting?.pacing
     if (!pacingConfig?.enabled) {
@@ -105,7 +110,7 @@ export function useTurnPacing(options: UseTurnPacingOptions) {
       enabled: pacingConfig.enabled,
       armMinMs: pacingConfig.armMinMs ?? 900,
       armMaxMs: pacingConfig.armMaxMs ?? 3500,
-      maxFillerDurationMs: pacingConfig.maxFillerDurationMs ?? 2200,
+      maxFillerDurationMs: pacingConfig.maxFillerDurationMs ?? 3000,
       reasoningWindowMs: pacingConfig.reasoningWindowMs ?? 900,
       categoryThreshold: pacingConfig.categoryThreshold ?? 2,
       kFast: pacingConfig.kFast ?? 0.5,
@@ -115,8 +120,8 @@ export function useTurnPacing(options: UseTurnPacingOptions) {
       semanticExtractorEnabled: pacingConfig.semanticExtractorEnabled ?? false,
       dynamicAfterMs: pacingConfig.dynamicAfterMs ?? 15000,
       candidateTtlMs: pacingConfig.candidateTtlMs ?? 15000,
-      maxFillerSynthesisBudgetMs: pacingConfig.maxFillerSynthesisBudgetMs ?? 2500,
-      maxSynthesisBudgetMs: pacingConfig.maxSynthesisBudgetMs ?? 2500,
+      maxFillerSynthesisBudgetMs: pacingConfig.maxFillerSynthesisBudgetMs ?? 3200,
+      maxSynthesisBudgetMs: pacingConfig.maxSynthesisBudgetMs ?? 3200,
       experimentalOrganicPivots: pacingConfig.experimentalOrganicPivots ?? false,
     }
 
@@ -243,6 +248,31 @@ export function useTurnPacing(options: UseTurnPacingOptions) {
     coordinator.dispatch()
     activeCoordinator = coordinator
     activeBridge = bridge
+
+    // Task 2: Fast-path probe on user prompt at t = 0 racing against TTFT
+    const promptText = userPrompt || (typeof context?.message?.content === 'string' ? context.message.content : '')
+    if (policy.semanticExtractorEnabled && promptText) {
+      void needleClient.probeInitialReaction(promptText, policy.armMinMs ?? 900).then((reaction) => {
+        if (reaction && activeCoordinator && activeCoordinator.generation === gen && !activeCoordinator.pacingClosed && activeCoordinator.state !== 'SETTLED') {
+          console.log(`[TurnPacing:Needle] Task 2 probe yielded initial candidate: "${reaction}"`)
+          coordinator.submitAsideCandidate({
+            cueId: `needle-turn1-${Date.now()}`,
+            turn: {
+              turnId,
+              generation: gen,
+            },
+            source: 'organic',
+            text: reaction,
+            phraseKey: `needle-turn1-${Date.now()}`,
+            collectedAtMs: Date.now(),
+            expiresAtMs: Date.now() + (policy.candidateTtlMs ?? 15000),
+          }, gen)
+        }
+      }).catch((err) => {
+        console.warn('[useTurnPacing] Needle probeInitialReaction error:', err)
+      })
+    }
+
     return coordinator
   }
 
@@ -255,6 +285,38 @@ export function useTurnPacing(options: UseTurnPacingOptions) {
       visibility: 'hidden',
       at: Date.now(),
     })
+
+    // Task 3: Background extraction on streaming CoT reasoning buffer ahead of interval tick
+    activeReasoningBuffer += chunk
+    const now = Date.now()
+    if (
+      activeCoordinator
+      && activeCoordinator.policy.semanticExtractorEnabled
+      && now - lastCotExtractionAtMs > 3000
+    ) {
+      lastCotExtractionAtMs = now
+      const windowSnippet = activeReasoningBuffer.slice(-600)
+      const currentGen = activeCoordinator.generation
+      void needleClient.probeCotPivot(windowSnippet, 1500).then((pivot) => {
+        if (pivot && activeCoordinator && activeCoordinator.generation === currentGen && !activeCoordinator.pacingClosed && activeCoordinator.state !== 'SETTLED') {
+          console.log(`[TurnPacing:Needle] Task 3 CoT pivot yielded candidate: "${pivot}"`)
+          activeCoordinator.submitAsideCandidate({
+            cueId: `needle-pivot-${Date.now()}`,
+            turn: {
+              turnId: activeCoordinator.turnId,
+              generation: currentGen,
+            },
+            source: 'organic',
+            text: pivot,
+            phraseKey: `needle-pivot-${Date.now()}`,
+            collectedAtMs: Date.now(),
+            expiresAtMs: Date.now() + (activeCoordinator.policy.candidateTtlMs ?? 15000),
+          }, currentGen)
+        }
+      }).catch((err) => {
+        console.warn('[useTurnPacing] Needle probeCotPivot error:', err)
+      })
+    }
   }
 
   function onDynamicAsideCue(cue: AsideCandidate) {

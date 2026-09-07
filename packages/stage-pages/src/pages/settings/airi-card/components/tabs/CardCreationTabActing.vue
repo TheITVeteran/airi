@@ -3,11 +3,11 @@ import type { PrewarmProgressEvent } from '@proj-airi/stage-ui/libs/pacing'
 import type { SpeechCapabilitiesInfo } from '@proj-airi/stage-ui/stores/providers'
 import type { ThinkingCategory, ThinkingFillerPhrase } from '@proj-airi/stage-ui/types/pacing'
 
+import { isNeedleModelCached, needleClient } from '@proj-airi/stage-ui/libs/inference'
 import {
   clearThinkingAudioCache,
   getThinkingAudio,
   isThinkingAudioCached,
-
   prewarmThinkingFillers,
 } from '@proj-airi/stage-ui/libs/pacing'
 import { useSpeechStore } from '@proj-airi/stage-ui/stores/modules/speech'
@@ -50,7 +50,7 @@ const selectedActingIdleAnimations = defineModel<string[]>('selectedActingIdleAn
 const pacingEnabled = defineModel<boolean>('pacingEnabled', { default: false })
 const pacingArmMinMs = defineModel<number>('pacingArmMinMs', { default: 1200 })
 const pacingArmMaxMs = defineModel<number>('pacingArmMaxMs', { default: 3500 })
-const pacingMaxFillerDurationMs = defineModel<number>('pacingMaxFillerDurationMs', { default: 2200 })
+const pacingMaxFillerDurationMs = defineModel<number>('pacingMaxFillerDurationMs', { default: 3000 })
 const pacingCategoryThreshold = defineModel<number>('pacingCategoryThreshold', { default: 1 })
 const pacingMaxFillersPerTurn = defineModel<number>('pacingMaxFillersPerTurn', { default: 3 })
 const pacingIntervalMs = defineModel<number>('pacingIntervalMs', { default: 15000 })
@@ -63,8 +63,8 @@ const pacingDynamicAsidesEnabled = defineModel<boolean>('pacingDynamicAsidesEnab
 const pacingSemanticExtractorEnabled = defineModel<boolean>('pacingSemanticExtractorEnabled', { default: false })
 const pacingDynamicAfterMs = defineModel<number>('pacingDynamicAfterMs', { default: 15000 })
 const pacingCandidateTtlMs = defineModel<number>('pacingCandidateTtlMs', { default: 15000 })
-const pacingMaxFillerSynthesisBudgetMs = defineModel<number>('pacingMaxFillerSynthesisBudgetMs', { default: 2500 })
-const pacingMaxSynthesisBudgetMs = defineModel<number>('pacingMaxSynthesisBudgetMs', { default: 2500 })
+const pacingMaxFillerSynthesisBudgetMs = defineModel<number>('pacingMaxFillerSynthesisBudgetMs', { default: 3200 })
+const pacingMaxSynthesisBudgetMs = defineModel<number>('pacingMaxSynthesisBudgetMs', { default: 3200 })
 const pacingExperimentalOrganicPivots = defineModel<boolean>('pacingExperimentalOrganicPivots', { default: false })
 
 // Sub-Tab Navigation (Consolidated 3 Hubs)
@@ -207,6 +207,7 @@ watch([() => props.selectedSpeechProvider, () => props.selectedSpeechModel, () =
 
 onMounted(() => {
   void refreshCacheStatuses()
+  void checkNeedleStatus()
 })
 
 const cachedFillersCount = computed(() => {
@@ -252,6 +253,45 @@ async function handleClearCache() {
   await clearThinkingAudioCache()
   await refreshCacheStatuses()
 }
+
+// Needle 2 Subconscious Runtime (Tier 2 Semantic Extractor)
+const isNeedlePrepared = ref(false)
+const isNeedleDownloading = ref(false)
+const needleDownloadProgress = ref(0)
+
+async function checkNeedleStatus() {
+  try {
+    isNeedlePrepared.value = await isNeedleModelCached()
+  }
+  catch {
+    isNeedlePrepared.value = false
+  }
+}
+
+async function downloadAndPrepareNeedle() {
+  if (isNeedleDownloading.value)
+    return
+  isNeedleDownloading.value = true
+  needleDownloadProgress.value = 0
+  try {
+    const ok = await needleClient.prepare((ratio) => {
+      needleDownloadProgress.value = Math.round(ratio * 100)
+    })
+    isNeedlePrepared.value = ok || await isNeedleModelCached()
+  }
+  catch (err) {
+    console.warn('[ActingTab] Failed to prepare Needle 2:', err)
+  }
+  finally {
+    isNeedleDownloading.value = false
+  }
+}
+
+watch(pacingSemanticExtractorEnabled, (enabled) => {
+  if (enabled) {
+    void checkNeedleStatus()
+  }
+})
 
 // Audition playback
 const playingText = ref<string | null>(null)
@@ -365,12 +405,12 @@ function resetToDefaultFillers() {
 function resetThresholdsToDefaults() {
   pacingArmMinMs.value = 1200
   pacingArmMaxMs.value = 3500
-  pacingMaxFillerDurationMs.value = 2200
+  pacingMaxFillerDurationMs.value = 3000
   pacingCategoryThreshold.value = 1
   pacingMaxFillersPerTurn.value = 3
   pacingIntervalMs.value = 15000
-  pacingMaxFillerSynthesisBudgetMs.value = 2500
-  pacingMaxSynthesisBudgetMs.value = 2500
+  pacingMaxFillerSynthesisBudgetMs.value = 3200
+  pacingMaxSynthesisBudgetMs.value = 3200
   pacingDynamicAfterMs.value = 15000
   pacingCandidateTtlMs.value = 15000
 }
@@ -873,6 +913,49 @@ function resetThresholdsToDefaults() {
                     WASM Neural Gate
                   </span>
                 </div>
+
+                <!-- Inline Prep & Status Panel (visible when enabled) -->
+                <div v-if="pacingSemanticExtractorEnabled" class="mt-3 border-t border-neutral-200/70 pt-2.5 dark:border-neutral-800/70">
+                  <div class="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                    <div class="flex items-center gap-2">
+                      <div
+                        class="h-2 w-2 rounded-full"
+                        :class="isNeedlePrepared ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]' : 'bg-amber-500/70'"
+                      />
+                      <span class="text-[11px] text-neutral-700 font-medium dark:text-neutral-300">
+                        Status: <strong class="font-semibold">{{ isNeedlePrepared ? 'Ready (14 MB in Cache)' : 'Not Prepared (14 MB)' }}</strong>
+                      </span>
+                    </div>
+
+                    <button
+                      v-if="!isNeedlePrepared"
+                      type="button"
+                      :disabled="isNeedleDownloading"
+                      class="inline-flex items-center gap-1.5 border border-primary-500/30 rounded-lg bg-primary-500/10 px-2.5 py-1 text-xs text-primary-600 font-medium transition disabled:cursor-not-allowed dark:border-primary-400/30 dark:bg-primary-400/15 hover:bg-primary-500/20 dark:text-primary-300 disabled:opacity-50"
+                      @click="downloadAndPrepareNeedle"
+                    >
+                      <span v-if="isNeedleDownloading" class="i-solar:refresh-circle-bold animate-spin text-sm" />
+                      <span v-else class="i-solar:bolt-bold text-sm" />
+                      <span>{{ isNeedleDownloading ? `Downloading (${needleDownloadProgress}%)` : 'Download & Prepare Needle 2 (14 MB)' }}</span>
+                    </button>
+                    <div v-else class="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium dark:text-emerald-400">
+                      <span class="i-solar:check-circle-bold text-sm" />
+                      <span>Pre-warmed in Cache</span>
+                    </div>
+                  </div>
+
+                  <!-- Download progress bar if in flight -->
+                  <div v-if="isNeedleDownloading" class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+                    <div
+                      class="h-full rounded-full bg-primary-500 transition-all duration-300"
+                      :style="{ width: `${needleDownloadProgress}%` }"
+                    />
+                  </div>
+
+                  <p class="mt-2 text-[10px] text-neutral-400 leading-relaxed dark:text-neutral-500">
+                    Stored locally in browser cache. If not downloaded now, will automatically prime on first reasoning turn.
+                  </p>
+                </div>
               </div>
 
               <!-- Tier 3: Heuristic Keyword & Organic Pivots -->
@@ -982,7 +1065,7 @@ function resetThresholdsToDefaults() {
                 >
                 <div class="flex items-center justify-between text-[10px] text-neutral-400">
                   <span>200ms</span>
-                  <span>2500ms (Default)</span>
+                  <span>3200ms (Default)</span>
                   <span>5000ms</span>
                 </div>
               </div>
@@ -1079,14 +1162,14 @@ function resetThresholdsToDefaults() {
                 v-model.number="pacingMaxFillerDurationMs"
                 type="range"
                 min="800"
-                max="3500"
+                max="4000"
                 step="50"
                 class="h-1.5 w-full cursor-pointer accent-primary-500"
               >
               <div class="flex items-center justify-between text-[10px] text-neutral-400">
                 <span>800ms (Snappy)</span>
-                <span>2200ms (Default)</span>
-                <span>3500ms (Spacious)</span>
+                <span>3000ms (Default)</span>
+                <span>4000ms (Spacious)</span>
               </div>
             </div>
 

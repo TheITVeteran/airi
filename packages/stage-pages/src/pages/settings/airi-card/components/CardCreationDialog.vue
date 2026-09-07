@@ -1127,7 +1127,7 @@ function initializeCard(): Card {
   pacingEnabled.value = airiExt?.acting?.pacing?.enabled ?? false
   pacingArmMinMs.value = airiExt?.acting?.pacing?.armMinMs ?? 1200
   pacingArmMaxMs.value = airiExt?.acting?.pacing?.armMaxMs ?? 3500
-  pacingMaxFillerDurationMs.value = airiExt?.acting?.pacing?.maxFillerDurationMs ?? 2200
+  pacingMaxFillerDurationMs.value = airiExt?.acting?.pacing?.maxFillerDurationMs ?? 3000
   pacingCategoryThreshold.value = airiExt?.acting?.pacing?.categoryThreshold ?? 1
   pacingMaxFillersPerTurn.value = airiExt?.acting?.pacing?.maxFillersPerTurn ?? 3
   pacingIntervalMs.value = airiExt?.acting?.pacing?.pacingIntervalMs ?? 15000
@@ -1135,8 +1135,8 @@ function initializeCard(): Card {
   pacingSemanticExtractorEnabled.value = airiExt?.acting?.pacing?.semanticExtractorEnabled ?? false
   pacingDynamicAfterMs.value = airiExt?.acting?.pacing?.dynamicAfterMs ?? 15000
   pacingCandidateTtlMs.value = airiExt?.acting?.pacing?.candidateTtlMs ?? 15000
-  pacingMaxFillerSynthesisBudgetMs.value = airiExt?.acting?.pacing?.maxFillerSynthesisBudgetMs ?? 2500
-  pacingMaxSynthesisBudgetMs.value = airiExt?.acting?.pacing?.maxSynthesisBudgetMs ?? 2500
+  pacingMaxFillerSynthesisBudgetMs.value = airiExt?.acting?.pacing?.maxFillerSynthesisBudgetMs ?? 3200
+  pacingMaxSynthesisBudgetMs.value = airiExt?.acting?.pacing?.maxSynthesisBudgetMs ?? 3200
   pacingExperimentalOrganicPivots.value = airiExt?.acting?.pacing?.experimentalOrganicPivots ?? false
   pacingFillers.value = airiExt?.acting?.pacing?.fillers && airiExt.acting.pacing.fillers.length > 0
     ? JSON.parse(JSON.stringify(airiExt.acting.pacing.fillers))

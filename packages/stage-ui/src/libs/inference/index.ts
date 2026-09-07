@@ -1,14 +1,19 @@
 export { createLocalVisionAdapter } from './adapters/blip'
 export type { LocalVisionAdapter } from './adapters/blip'
+export { createNeedleClient, needleClient } from './adapters/needle-client'
+export type { NeedleClient } from './adapters/needle-client'
 export {
   clearModelCache,
+  clearNeedleCache,
   clearSingleModelCache,
   clearWebLlmCache,
   evictOtherWhisperModels,
   formatBytes,
   getModelCacheSize,
+  getNeedleCacheSize,
   getWebLlmCacheSize,
   isModelCached,
+  isNeedleModelCached,
   isWebLlmModelCached,
 } from './cache-utils'
 export {

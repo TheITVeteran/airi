@@ -48,6 +48,14 @@ const knownModels: KnownModelItem[] = [
     icon: 'i-solar:chat-round-dots-bold-duotone',
     description: 'In-browser WebGPU transformer execution engine',
   },
+  {
+    id: 'needle-2',
+    name: 'Needle 2 (Cactus SAN 45M)',
+    category: 'llm',
+    runtime: 'WASM / CPU',
+    icon: 'i-solar:magic-stick-3-bold-duotone',
+    description: '14 MB on-device semantic extractor for real-time aside generation & conversational pacing',
+  },
 
   // 2. Audio & Speech
   {

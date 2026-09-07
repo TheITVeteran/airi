@@ -148,7 +148,7 @@ export const DEFAULT_PACING_POLICY: PacingPolicyConfig = {
   enabled: false,
   armMinMs: 900,
   armMaxMs: 3500,
-  maxFillerDurationMs: 2200,
+  maxFillerDurationMs: 3000,
   reasoningWindowMs: 900,
   categoryThreshold: 2,
   kFast: 0.5,
@@ -158,7 +158,7 @@ export const DEFAULT_PACING_POLICY: PacingPolicyConfig = {
   semanticExtractorEnabled: false,
   dynamicAfterMs: 15000,
   candidateTtlMs: 15000,
-  maxFillerSynthesisBudgetMs: 2500,
-  maxSynthesisBudgetMs: 2500,
+  maxFillerSynthesisBudgetMs: 3200,
+  maxSynthesisBudgetMs: 3200,
   experimentalOrganicPivots: false,
 }

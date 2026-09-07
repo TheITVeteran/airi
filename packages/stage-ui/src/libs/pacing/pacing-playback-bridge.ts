@@ -211,7 +211,7 @@ export class PacingPlaybackBridge<TAudio = AudioBuffer> {
       if (audioData && typeof (audioData as any).duration === 'number')
         durationSec = (audioData as any).duration
       const durationMs = durationSec * 1000
-      const maxDurationMs = this.coordinator.policy.maxFillerDurationMs ?? 2200
+      const maxDurationMs = this.coordinator.policy.maxFillerDurationMs ?? 3000
       if (!Number.isFinite(durationSec) || durationSec <= 0 || durationMs > maxDurationMs) {
         this.coordinator.notifyCacheMiss({
           reason: 'synthesis_failed',
@@ -314,7 +314,7 @@ export class PacingPlaybackBridge<TAudio = AudioBuffer> {
       return false
     }
 
-    const budgetMs = this.coordinator.policy.maxSynthesisBudgetMs ?? 2500
+    const budgetMs = this.coordinator.policy.maxSynthesisBudgetMs ?? 3200
     const abortController = new AbortController()
     this.activeAbortController = abortController
     const startSynthesizeAt = this.clock.now()
@@ -409,7 +409,7 @@ export class PacingPlaybackBridge<TAudio = AudioBuffer> {
     }
 
     const durationMs = durationSec * 1000
-    const maxDurationMs = this.coordinator.policy.maxFillerDurationMs ?? 2200
+    const maxDurationMs = this.coordinator.policy.maxFillerDurationMs ?? 3000
 
     if (!Number.isFinite(durationSec) || durationSec <= 0 || durationMs > maxDurationMs) {
       // Non-finite, zero, or overlong clip rejected per spec §8.2
