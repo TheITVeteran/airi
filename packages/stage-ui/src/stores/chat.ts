@@ -1414,7 +1414,7 @@ You must now react to this outcome and provide a rich, narrative-driven climax r
             try {
               const firstHopProvider = await providersStore.getProviderInstance(firstHopProviderId)
               const firstHopConfig = providersStore.getProviderConfig(firstHopProviderId)
-              const headers = { ...firstHopConfig?.headers } as Record<string, string>
+              const headers = { ...(firstHopConfig?.headers as Record<string, string> | undefined) }
               if (firstHopProviderId === 'opencode-go' && sessionId && !headers['x-opencode-session']) {
                 headers['x-opencode-session'] = sessionId
               }
@@ -1503,7 +1503,7 @@ Format your output as a raw thought log.`
         await hooks.emitAfterMessageComposedHooks(sendingMessage, streamingMessageContext)
         await hooks.emitBeforeSendHooks(sendingMessage, streamingMessageContext)
 
-        const headers = { ...effectiveConfig?.headers } as Record<string, string>
+        const headers = { ...(effectiveConfig?.headers as Record<string, string> | undefined) }
         if (effectiveProviderId === 'opencode-go' && sessionId && !headers['x-opencode-session']) {
           headers['x-opencode-session'] = sessionId
         }

@@ -3,7 +3,6 @@ import type { Live2DValidationReport } from '@proj-airi/stage-ui-live2d'
 
 import type { DisplayModel } from '../../../../stores/display-models'
 
-import { vAutoAnimate } from '@formkit/auto-animate/vue'
 import { validateLive2DZip } from '@proj-airi/stage-ui-live2d'
 import { useMmd } from '@proj-airi/stage-ui-mmd/stores/mmd'
 import { extractMmdFromZip } from '@proj-airi/stage-ui-mmd/utils/mmd-zip-extractor'
@@ -13,6 +12,7 @@ import { refDebounced, useFileDialog, useIntersectionObserver, useLocalStorage }
 import { storeToRefs } from 'pinia'
 import { DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle, DropdownMenuContent, DropdownMenuItem, DropdownMenuPortal, DropdownMenuRoot, DropdownMenuTrigger, PopoverAnchor, PopoverContent, PopoverPortal, PopoverRoot, PopoverTrigger } from 'reka-ui'
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 
 import catalogUrl from '../../../../../public/assets/animadex-catalog.json?url'
@@ -148,11 +148,25 @@ const live2dImportToastId = ref<string | number | null>(null)
 const live2dImportedCount = ref(0)
 const validationReport = computed(() => live2dQueue.value[live2dQueueIndex.value]?.report ?? null)
 
-const currentTab = ref<'library' | 'explore' | 'cloud'>(props.initialTab || 'library')
+const router = useRouter()
+const isExploreTipDismissed = useLocalStorage('airi:model-selector-explore-tip-dismissed', false)
+
+function handleNavigateToExplore() {
+  emits('close')
+  router.push('/settings/models/explore')
+}
+
+const currentTab = ref<'library' | 'cloud'>(props.initialTab === 'cloud' ? 'cloud' : 'library')
 
 watch(() => props.initialTab, (newTab) => {
-  if (newTab)
-    currentTab.value = newTab
+  if (newTab === 'explore') {
+    handleNavigateToExplore()
+    return
+  }
+  if (newTab === 'cloud')
+    currentTab.value = 'cloud'
+  else
+    currentTab.value = 'library'
 }, { immediate: true })
 
 watch(currentTab, (newTab) => {
@@ -173,28 +187,6 @@ onMounted(() => {
     }, 450)
   }
 })
-
-const marketplaces = [
-  { name: 'Steam Workshop', vrm: false, live2d: true, spine: true, mmd: false, languages: ['us'], origin: 'Steam', url: 'https://steamcommunity.com/workshop/browse/?appid=616720' },
-  { name: 'VChaVCha (Hololive MMD)', vrm: false, live2d: false, spine: false, mmd: true, languages: ['us'], origin: 'VChaVCha', url: 'https://vchavcha.com/en/free-resources/hololive-mmd-download/' },
-  { name: 'NicoNico 3D (MMD)', vrm: false, live2d: false, spine: false, mmd: true, languages: ['jp'], origin: 'Japan', url: 'https://3d.nicovideo.jp/search?category=all&download_filter=all&limit=28&max_pages=100&order=1&page=1&perfect_match=1&sort=view&usable_animation=&word=MMD&word_type=tag&work_type=mmd' },
-  { name: 'Reverse: 1999 (v1.7+)', vrm: false, live2d: true, spine: false, mmd: false, languages: ['cn', 'en'], origin: 'Storm Preservation', url: 'https://dasilva333.github.io/r1999-web-gallery/' },
-  { name: 'Eikanya Live2D Archive (4.9k+)', vrm: false, live2d: true, spine: false, mmd: false, languages: ['cn', 'en'], origin: 'Eikanya', url: 'https://dasilva333.github.io/live2d-eikanya-index/' },
-  { name: 'SillyTavern Live2D Portal (270)', vrm: false, live2d: true, spine: false, mmd: false, languages: ['cn', 'en'], origin: 'test157t', url: 'https://dasilva333.github.io/live2d-test157t-index/' },
-  { name: 'bear0830 (MMD Animations)', vrm: false, live2d: false, spine: false, mmd: true, languages: ['us'], origin: 'GitHub', url: 'https://github.com/bear0830/mmd' },
-  { name: 'Booth', vrm: true, live2d: true, spine: false, mmd: false, languages: ['jp', 'us'], origin: 'Japan', url: 'https://booth.pm/en/browse/VTuber' },
-  { name: 'Booth VRMA', vrm: true, live2d: false, spine: false, mmd: false, languages: ['jp', 'us'], origin: 'Japan', url: 'https://booth.pm/en/browse/3D%20Motion%20&%20Animation?sort=price_asc&tags%5B%5D=VRMA' },
-  { name: 'VGen', vrm: true, live2d: true, spine: false, mmd: false, languages: ['us'], origin: 'USA', url: 'https://vgen.co' },
-  { name: 'itch.io', vrm: true, live2d: true, spine: false, mmd: false, languages: ['us'], origin: 'USA', url: 'https://itch.io/game-assets' },
-  { name: 'Gumroad', vrm: true, live2d: true, spine: false, mmd: false, languages: ['us'], origin: 'USA', url: 'https://gumroad.com' },
-  { name: 'Ko-fi', vrm: true, live2d: true, spine: false, mmd: false, languages: ['us'], origin: 'USA', url: 'https://ko-fi.com/shop' },
-  { name: 'VRoid Hub', vrm: true, live2d: false, spine: false, mmd: false, languages: ['jp', 'us'], origin: 'Japan', url: 'https://hub.vroid.com' },
-  { name: 'Sketchfab', vrm: true, live2d: false, spine: false, mmd: false, languages: ['us'], origin: 'USA', url: 'https://sketchfab.com' },
-  { name: 'CGTrader', vrm: true, live2d: false, spine: false, mmd: false, languages: ['us'], origin: 'USA', url: 'https://cgtrader.com' },
-  { name: 'Nizima', vrm: false, live2d: true, spine: false, mmd: false, languages: ['jp', 'us'], origin: 'Japan', url: 'https://nizima.com' },
-  { name: 'Avatar Atelier', vrm: false, live2d: true, spine: false, mmd: false, languages: ['us'], origin: 'USA', url: 'https://avataratelier.com' },
-  { name: 'VTuberAvatars', vrm: false, live2d: true, spine: false, mmd: false, languages: ['us'], origin: 'USA', url: 'https://vtuberavatars.com' },
-]
 
 // Filtering Logic
 const filteredModels = computed(() => {
@@ -1164,16 +1156,6 @@ async function runAutoLinkCatalog() {
           </button>
           <button
             :class="[
-              currentTab === 'explore' ? 'bg-white dark:bg-neutral-700 shadow-sm' : 'opacity-50 hover:opacity-100',
-              'px-3 py-1 rounded-md transition-all text-sm font-bold flex items-center gap-1',
-            ]"
-            @click="currentTab = 'explore'"
-          >
-            <div class="i-solar:compass-bold-duotone" />
-            Explore
-          </button>
-          <button
-            :class="[
               currentTab === 'cloud' ? 'bg-white dark:bg-neutral-700 shadow-sm' : 'opacity-50 hover:opacity-100',
               'px-3 py-1 rounded-md transition-all text-sm font-bold flex items-center gap-1',
             ]"
@@ -1355,6 +1337,38 @@ async function runAutoLinkCatalog() {
             </DropdownMenuContent>
           </DropdownMenuPortal>
         </DropdownMenuRoot>
+      </div>
+    </div>
+
+    <!-- Dismissable Tip Banner -->
+    <div
+      v-if="!isExploreTipDismissed"
+      class="flex flex-col gap-2 border border-primary-500/20 rounded-xl bg-primary-500/5 px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between dark:border-primary-500/25 dark:bg-primary-500/10"
+    >
+      <div class="min-w-0 flex items-center gap-2.5">
+        <div class="i-solar:planet-3-bold-duotone shrink-0 text-lg text-primary-500 dark:text-primary-400" />
+        <span class="text-xs text-neutral-600 leading-snug dark:text-neutral-300">
+          Tired of the models you have? Looking to download some free cool new ones? Check out our curated catalog of avatars and marketplaces.
+        </span>
+      </div>
+
+      <div class="flex shrink-0 items-center self-end gap-2 sm:self-center">
+        <button
+          type="button"
+          class="flex items-center gap-1 rounded-lg bg-primary-500 px-3 py-1 text-xs text-white font-bold transition-colors hover:bg-primary-600"
+          @click="handleNavigateToExplore"
+        >
+          <span>Discover Avatars</span>
+          <div class="i-solar:arrow-right-linear text-xs" />
+        </button>
+        <button
+          type="button"
+          class="cursor-pointer rounded-md p-1 text-neutral-400 transition-colors hover:bg-neutral-200/50 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          title="Dismiss tip"
+          @click="isExploreTipDismissed = true"
+        >
+          <div class="i-solar:close-circle-bold text-sm" />
+        </button>
       </div>
     </div>
 
@@ -1926,57 +1940,6 @@ async function runAutoLinkCatalog() {
               Load More ({{ paginatedModels.length }} of {{ filteredModels.length }})
             </button>
           </div>
-        </div>
-      </div>
-    </template>
-
-    <!-- Explore Tab Content -->
-    <template v-else-if="currentTab === 'explore'">
-      <div class="flex-1 overflow-y-auto pb-4 pr-2">
-        <div v-auto-animate class="grid grid-cols-1 gap-4 lg:grid-cols-3 md:grid-cols-2">
-          <a
-            v-for="site in marketplaces"
-            :key="site.name"
-            :href="site.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="group flex flex-col gap-3 border border-transparent rounded-xl bg-neutral-100 p-4 shadow-sm transition-all duration-300 hover:border-primary-500/50 dark:bg-neutral-800/50 hover:bg-white hover:shadow-md dark:hover:bg-neutral-800"
-          >
-            <div class="flex items-start justify-between">
-              <div class="text-lg font-bold transition-colors group-hover:text-primary-500">{{ site.name }}</div>
-              <div class="i-solar:share-circle-bold-duotone text-primary-500 opacity-0 transition-opacity group-hover:opacity-100" />
-            </div>
-
-            <div class="flex flex-wrap gap-2">
-              <div v-if="site.vrm" class="border border-blue-500/20 rounded bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-500 font-bold">VRM</div>
-              <div v-if="site.live2d" class="border border-green-500/20 rounded bg-green-500/10 px-2 py-0.5 text-[10px] text-green-500 font-bold">LIVE2D</div>
-              <div v-if="site.spine" class="border border-purple-500/20 rounded bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-500 font-bold">SPINE</div>
-              <div v-if="site.mmd" class="border border-pink-500/20 rounded bg-pink-500/10 px-2 py-0.5 text-[10px] text-pink-500 font-bold">MMD</div>
-            </div>
-
-            <div class="mt-auto flex items-center justify-between border-t border-neutral-200 pt-2 dark:border-neutral-700">
-              <div class="flex items-center gap-1 text-xs opacity-50">
-                <div class="i-solar:globus-linear" />
-                {{ site.origin }}
-              </div>
-              <div class="flex gap-1">
-                <span v-for="lang in site.languages" :key="lang" class="text-xs">
-                  {{ lang === 'jp' ? '日本語' : 'English' }}
-                </span>
-              </div>
-            </div>
-          </a>
-        </div>
-
-        <div class="mt-8 flex flex-col items-center gap-2 border border-primary-500/10 rounded-2xl bg-primary-500/5 p-6 text-center">
-          <div class="i-solar:info-circle-bold-duotone text-3xl text-primary-500" />
-          <div class="text-lg font-bold">
-            Know more resources?
-          </div>
-          <div class="max-w-sm text-sm opacity-70">
-            Help the community by suggesting more marketplaces for VRM and Live2D models!
-          </div>
-          <a href="https://github.com/moeru-ai/airi/issues" target="_blank" class="mt-2 rounded-lg bg-primary-500 px-4 py-2 text-white font-bold transition-colors hover:bg-primary-600">Suggest a Site</a>
         </div>
       </div>
     </template>

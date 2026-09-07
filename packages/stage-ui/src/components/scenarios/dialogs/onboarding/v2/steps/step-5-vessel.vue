@@ -5,6 +5,7 @@ import { toast } from 'vue-sonner'
 
 import CompanionBubble from '../components/companion-bubble.vue'
 
+import { MODEL_MARKETPLACES } from '../../../../../../constants/marketplaces'
 import { DisplayModelFormat, useDisplayModelsStore } from '../../../../../../stores/display-models'
 import { ModelSelectorDialog } from '../../../model-selector'
 import { useOnboardingV2Draft } from '../draft-store'
@@ -112,28 +113,8 @@ function handleFileDrop(event: DragEvent) {
   }
 }
 
-// Mirrors the full marketplaces catalog from model-selector.vue.
-const exploreLinks = [
-  { name: 'Steam Workshop', vrm: false, live2d: true, spine: true, mmd: false, origin: 'Steam', url: 'https://steamcommunity.com/workshop/browse/?appid=616720' },
-  { name: 'VChaVCha (Hololive MMD)', vrm: false, live2d: false, spine: false, mmd: true, origin: 'VChaVCha', url: 'https://vchavcha.com/en/free-resources/hololive-mmd-download/' },
-  { name: 'NicoNico 3D (MMD)', vrm: false, live2d: false, spine: false, mmd: true, origin: 'Japan', url: 'https://3d.nicovideo.jp/search?category=all&download_filter=all&limit=28&max_pages=100&order=1&page=1&perfect_match=1&sort=view&usable_animation=&word=MMD&word_type=tag&work_type=mmd' },
-  { name: 'Reverse: 1999 (v1.7+)', vrm: false, live2d: true, spine: false, mmd: false, origin: 'Storm Preservation', url: 'https://dasilva333.github.io/r1999-web-gallery/' },
-  { name: 'Eikanya Live2D Archive (4.9k+)', vrm: false, live2d: true, spine: false, mmd: false, origin: 'Eikanya', url: 'https://dasilva333.github.io/live2d-eikanya-index/' },
-  { name: 'SillyTavern Live2D Portal (270)', vrm: false, live2d: true, spine: false, mmd: false, origin: 'test157t', url: 'https://dasilva333.github.io/live2d-test157t-index/' },
-  { name: 'bear0830 (MMD Animations)', vrm: false, live2d: false, spine: false, mmd: true, origin: 'GitHub', url: 'https://github.com/bear0830/mmd' },
-  { name: 'Booth', vrm: true, live2d: true, spine: false, mmd: false, origin: 'Japan', url: 'https://booth.pm/en/browse/VTuber' },
-  { name: 'Booth VRMA', vrm: true, live2d: false, spine: false, mmd: false, origin: 'Japan', url: 'https://booth.pm/en/browse/3D%20Motion%20&%20Animation?sort=price_asc&tags%5B%5D=VRMA' },
-  { name: 'VGen', vrm: true, live2d: true, spine: false, mmd: false, origin: 'USA', url: 'https://vgen.co' },
-  { name: 'itch.io', vrm: true, live2d: true, spine: false, mmd: false, origin: 'USA', url: 'https://itch.io/game-assets' },
-  { name: 'Gumroad', vrm: true, live2d: true, spine: false, mmd: false, origin: 'USA', url: 'https://gumroad.com' },
-  { name: 'Ko-fi', vrm: true, live2d: true, spine: false, mmd: false, origin: 'USA', url: 'https://ko-fi.com/shop' },
-  { name: 'VRoid Hub', vrm: true, live2d: false, spine: false, mmd: false, origin: 'Japan', url: 'https://hub.vroid.com' },
-  { name: 'Sketchfab', vrm: true, live2d: false, spine: false, mmd: false, origin: 'USA', url: 'https://sketchfab.com' },
-  { name: 'CGTrader', vrm: true, live2d: false, spine: false, mmd: false, origin: 'USA', url: 'https://cgtrader.com' },
-  { name: 'Nizima', vrm: false, live2d: true, spine: false, mmd: false, origin: 'Japan', url: 'https://nizima.com' },
-  { name: 'Avatar Atelier', vrm: false, live2d: true, spine: false, mmd: false, origin: 'USA', url: 'https://avataratelier.com' },
-  { name: 'VTuberAvatars', vrm: false, live2d: true, spine: false, mmd: false, origin: 'USA', url: 'https://vtuberavatars.com' },
-]
+// Curated marketplaces catalog from shared constants
+const exploreLinks = MODEL_MARKETPLACES
 </script>
 
 <template>

@@ -34,6 +34,9 @@ export function convertCatalogItemToSearchItem(item: CatalogNodeItem): SearchIte
   else if (item.parentId === 'area-system') {
     category = 'System Preferences'
   }
+  else if (item.parentId === 'area-models') {
+    category = 'Companion Avatars'
+  }
   else if (item.parentId === 'area-memory') {
     category = 'Memory Systems'
   }

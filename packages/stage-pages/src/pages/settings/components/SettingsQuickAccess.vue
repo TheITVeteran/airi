@@ -88,7 +88,7 @@ const row2Items = computed<QuickAccessItem[]>(() => [
     id: 'discover-models',
     title: 'Get Free Avatars',
     icon: 'i-solar:planet-3-bold-duotone',
-    to: '/settings/models?action=explore',
+    to: '/settings/models/explore',
   },
 ])
 

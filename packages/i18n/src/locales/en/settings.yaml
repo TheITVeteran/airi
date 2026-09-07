@@ -370,6 +370,15 @@ pages:
           title: VRM
           description: Configure 3D VRM models and settings
         scene: Scene
+    explore:
+      title: Discover Avatars
+      description: Explore community archives, external repositories, and free model
+        libraries for VRM, Live2D, Spine, and MMD.
+    tip:
+      title: Looking for more avatars?
+      description: Tired of the models you have? Looking to download some free cool
+        new ones? Check out our curated catalog of avatars and marketplaces.
+      action: Discover Avatars
   scene:
     title: Stage Backgrounds
     description: Customize virtual backdrops and stage wallpaper images for your characters.

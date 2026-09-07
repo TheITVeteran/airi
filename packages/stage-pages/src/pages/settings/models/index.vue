@@ -37,13 +37,17 @@ async function extractColorsFromModel() {
 watch(
   [() => route.query.action, modelSettingsRef],
   ([action, refVal]) => {
+    if (action === 'explore') {
+      router.replace('/settings/models/explore')
+      return
+    }
+
     if (action && refVal) {
-      const tabMap: Record<string, 'library' | 'explore' | 'cloud'> = {
-        explore: 'explore',
+      const tabMap: Record<string, 'library' | 'cloud'> = {
         cloud: 'cloud',
         browse: 'library',
       }
-      const targetTab = tabMap[action as string] || 'explore'
+      const targetTab = tabMap[action as string] || 'library'
       refVal.openModelSelector(targetTab)
       router.replace({ query: {} })
     }

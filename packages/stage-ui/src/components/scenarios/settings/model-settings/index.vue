@@ -9,6 +9,7 @@ import { Button, Callout } from '@proj-airi/ui'
 import { useLocalStorage, useMouse } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import LHackerPanel from './live2d-lhack/LHackerPanel.vue'
 import Live2D from './live2d.vue'
@@ -38,10 +39,15 @@ defineEmits<{
   (e: 'extractColorsFromModel'): void
 }>()
 
+const router = useRouter()
 const modelSelectorOpen = ref(false)
 const modelSelectorTab = ref<'library' | 'explore' | 'cloud'>(props.initialTab || 'library')
 
 function openModelSelector(tab: 'library' | 'explore' | 'cloud' = 'library') {
+  if (tab === 'explore') {
+    router.push('/settings/models/explore')
+    return
+  }
   modelSelectorTab.value = tab
   modelSelectorOpen.value = true
 }
@@ -276,9 +282,9 @@ function handleOffsetChange(offset: { x: number, y: number }) {
             </button> to import models into your catalog. We support <strong>Live2D</strong> (Cubism 3.0 to 5.0 <code>.zip</code>), <strong>MMD</strong> (PMX files in <code>.zip</code>), <strong>Spine</strong> (3.8 to 4.2 <code>.zip</code>), and <strong>VRM</strong> (both 0.x and 1.x <code>.vrm</code>).
           </p>
           <p>
-            Custom animation uploads are also supported for VRM and MMD via <code>.vrma</code> and <code>.vmd</code> motion files. Check out the <button type="button" class="cursor-pointer font-semibold underline hover:text-primary-600 dark:hover:text-primary-300" @click="openModelSelector('explore')">
-              Explore
-            </button> tab inside <strong>Select Model</strong> to discover and download new community models!
+            Custom animation uploads are also supported for VRM and MMD via <code>.vrma</code> and <code>.vmd</code> motion files. Check out <button type="button" class="cursor-pointer font-semibold underline hover:text-primary-600 dark:hover:text-primary-300" @click="router.push('/settings/models/explore')">
+              Discover Avatars
+            </button> to discover and download new community models!
           </p>
         </Callout>
         <div
