@@ -1,16 +1,24 @@
 <script setup lang="ts">
-import type { ModelMarketplace } from '@proj-airi/stage-ui/constants'
+import type { ModelMarketplace, SpotlightModel } from '@proj-airi/stage-ui/constants'
 
-import { MODEL_MARKETPLACES } from '@proj-airi/stage-ui/constants'
-import { computed, ref } from 'vue'
+import { MODEL_MARKETPLACES, SPOTLIGHT_MODELS } from '@proj-airi/stage-ui/constants'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+
+import DiscoverCarousel from './components/DiscoverCarousel.vue'
 
 const { t } = useI18n()
 
 type FormatFilter = 'all' | 'vrm' | 'live2d' | 'spine' | 'mmd'
 
 const activeFilter = ref<FormatFilter>('all')
-const searchQuery = ref('')
+const activeSpotlightId = ref<string>(
+  activeFilter.value === 'vrm'
+    ? 'vroid-you-canaria'
+    : activeFilter.value === 'live2d'
+      ? 'kofi-dg-sheli'
+      : (SPOTLIGHT_MODELS[0]?.id || ''),
+)
 
 const filterTabs = [
   { id: 'all' as const, label: 'All Formats', icon: 'i-solar:box-minimalistic-bold-duotone' },
@@ -19,6 +27,41 @@ const filterTabs = [
   { id: 'spine' as const, label: 'Spine (2D)', icon: 'i-solar:bone-bold-duotone' },
   { id: 'mmd' as const, label: 'MMD', icon: 'i-solar:music-note-bold-duotone' },
 ]
+
+const filteredSpotlightModels = computed(() => {
+  if (activeFilter.value === 'all')
+    return SPOTLIGHT_MODELS
+  return SPOTLIGHT_MODELS.filter(m => m.format === activeFilter.value)
+})
+
+watch(activeFilter, (newTab) => {
+  if (newTab === 'vrm') {
+    activeSpotlightId.value = 'vroid-you-canaria'
+    return
+  }
+  if (newTab === 'live2d') {
+    activeSpotlightId.value = 'kofi-dg-sheli'
+    return
+  }
+  const models = newTab === 'all'
+    ? SPOTLIGHT_MODELS
+    : SPOTLIGHT_MODELS.filter(m => m.format === newTab)
+  if (models[0]) {
+    activeSpotlightId.value = models[0].id
+  }
+})
+
+const activeSpotlightModel = computed(() => {
+  return filteredSpotlightModels.value.find(m => m.id === activeSpotlightId.value)
+    || filteredSpotlightModels.value[0]
+    || null
+})
+
+function handleSpotlightSelect(model: SpotlightModel) {
+  if (model.downloadUrl) {
+    window.open(model.downloadUrl, '_blank', 'noopener,noreferrer')
+  }
+}
 
 const filteredMarketplaces = computed(() => {
   let list: ModelMarketplace[] = MODEL_MARKETPLACES
@@ -36,16 +79,15 @@ const filteredMarketplaces = computed(() => {
     list = list.filter(m => m.mmd)
   }
 
-  const query = searchQuery.value.trim().toLowerCase()
-  if (query) {
-    list = list.filter(m =>
-      m.name.toLowerCase().includes(query)
-      || m.origin.toLowerCase().includes(query)
-      || (m.description && m.description.toLowerCase().includes(query)),
-    )
-  }
-
   return list
+})
+
+const freeArchives = computed(() => {
+  return filteredMarketplaces.value.filter(m => m.pricing === 'free')
+})
+
+const creatorMarketplaces = computed(() => {
+  return filteredMarketplaces.value.filter(m => m.pricing !== 'free')
 })
 
 function formatLanguage(lang: string): string {
@@ -91,15 +133,14 @@ function formatLanguage(lang: string): string {
       <div class="pointer-events-none absolute h-36 w-36 rounded-full bg-primary-500/10 blur-2xl -right-12 -top-12 dark:bg-primary-500/15" />
     </div>
 
-    <!-- Filters & Search Toolbar -->
-    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <!-- Format Filter Pills -->
-      <div class="flex flex-wrap gap-1.5 rounded-xl bg-neutral-100 p-1 dark:bg-neutral-800/80">
+    <!-- Format Filter Segment Control -->
+    <div class="flex items-center">
+      <div class="inline-flex flex-wrap gap-1.5 rounded-xl bg-neutral-100 p-1 dark:bg-neutral-800/80">
         <button
           v-for="tab in filterTabs"
           :key="tab.id"
           :class="[
-            'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer',
+            'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer',
             activeFilter === tab.id
               ? 'bg-white text-neutral-900 shadow-2xs dark:bg-neutral-700 dark:text-neutral-50'
               : 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100',
@@ -110,96 +151,289 @@ function formatLanguage(lang: string): string {
           <span>{{ tab.label }}</span>
         </button>
       </div>
+    </div>
 
-      <!-- Search Input -->
-      <div class="relative w-full sm:w-64">
-        <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-          <div class="i-solar:magnifer-linear text-xs text-neutral-400" />
+    <!-- Featured Free Avatars Showcase Section -->
+    <div class="flex flex-col gap-3">
+      <div class="flex items-center justify-between px-1">
+        <div class="flex items-center gap-2">
+          <div class="i-solar:stars-bold-duotone text-base text-primary-500" />
+          <span class="text-xs text-neutral-700 font-bold tracking-wider uppercase dark:text-neutral-300">
+            Featured Free Avatars
+          </span>
         </div>
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Filter repositories..."
-          class="h-9 w-full border border-neutral-200/80 rounded-xl bg-white/70 py-1 pl-8 pr-8 text-xs text-neutral-800 outline-none backdrop-blur-sm transition-all dark:border-neutral-800/80 focus:border-primary-400 dark:bg-neutral-900/60 dark:text-neutral-100 dark:focus:border-primary-400"
+        <span class="text-[11px] text-neutral-400">
+          Showing {{ filteredSpotlightModels.length }} models
+        </span>
+      </div>
+
+      <!-- 3D Coverflow Carousel Stage -->
+      <div class="shadow-2xs overflow-hidden border border-neutral-200/80 rounded-2xl bg-neutral-50/70 p-2 backdrop-blur-sm dark:border-neutral-800/80 dark:bg-neutral-900/50">
+        <DiscoverCarousel
+          v-model:active-id="activeSpotlightId"
+          :models="filteredSpotlightModels"
+          @select="handleSpotlightSelect"
+        />
+
+        <!-- Active Model Spotlight Detail Card -->
+        <div
+          v-if="activeSpotlightModel"
+          class="dark:bg-neutral-850/90 mt-2 flex flex-col items-start justify-between gap-3.5 border border-neutral-200/80 rounded-xl bg-white/90 p-3.5 shadow-sm backdrop-blur-md sm:flex-row sm:items-center dark:border-neutral-800/80"
         >
-        <button
-          v-if="searchQuery"
-          class="absolute inset-y-0 right-0 flex items-center pr-2.5 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
-          @click="searchQuery = ''"
-        >
-          <div class="i-solar:close-circle-bold text-xs" />
-        </button>
+          <div class="min-w-0 flex items-center gap-3">
+            <!-- Mini Thumbnail / Silhouette Box -->
+            <div class="h-11 w-11 flex shrink-0 items-center justify-center overflow-hidden border border-neutral-200/80 rounded-lg bg-neutral-100 dark:border-neutral-700/80 dark:bg-neutral-800">
+              <img
+                v-if="activeSpotlightModel.previewUrl"
+                :src="activeSpotlightModel.previewUrl"
+                :alt="activeSpotlightModel.name"
+                class="h-full w-full object-cover"
+                referrerpolicy="no-referrer"
+                loading="lazy"
+              >
+              <div v-else class="i-solar:user-bold text-xl text-neutral-400 opacity-40" />
+            </div>
+
+            <!-- Avatar Metadata -->
+            <div class="min-w-0 flex flex-col">
+              <div class="flex flex-wrap items-center gap-2">
+                <h2 class="truncate text-sm text-neutral-900 font-bold dark:text-neutral-100">
+                  {{ activeSpotlightModel.name }}
+                </h2>
+                <span class="rounded bg-primary-500/10 px-2 py-0.5 text-[10px] text-primary-600 font-bold dark:text-primary-400">
+                  {{ activeSpotlightModel.formatLabel || activeSpotlightModel.format.toUpperCase() }}
+                </span>
+                <a
+                  v-if="activeSpotlightModel.sourceSiteUrl"
+                  :href="activeSpotlightModel.sourceSiteUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="flex items-center gap-0.5 text-[11px] text-neutral-400 transition-colors hover:text-primary-600 dark:hover:text-primary-400"
+                >
+                  <span>via {{ activeSpotlightModel.sourceSiteName }}</span>
+                  <div class="i-solar:arrow-up-right-linear text-[10px]" />
+                </a>
+              </div>
+
+              <div class="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+                <span v-if="activeSpotlightModel.author" class="font-medium">
+                  By {{ activeSpotlightModel.author }}
+                </span>
+                <span v-if="activeSpotlightModel.description" class="text-neutral-400 hidden sm:inline">•</span>
+                <span v-if="activeSpotlightModel.description" class="truncate text-neutral-400 hidden sm:inline">
+                  {{ activeSpotlightModel.description }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Primary CTA Button (Direct Download / Item Page) -->
+          <div class="flex shrink-0 items-center self-end gap-2 sm:self-center">
+            <a
+              :href="activeSpotlightModel.downloadUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="shadow-2xs inline-flex items-center gap-1.5 rounded-xl bg-primary-600 px-4 py-2 text-xs text-white font-bold transition-all active:scale-95 hover:bg-primary-700"
+            >
+              <span>Download Model</span>
+              <div class="i-solar:arrow-up-right-linear text-xs" />
+            </a>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Marketplace Cards Grid -->
-    <div class="grid grid-cols-1 gap-3.5 lg:grid-cols-3 sm:grid-cols-2">
-      <a
-        v-for="site in filteredMarketplaces"
-        :key="site.name"
-        :href="site.url"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="group shadow-2xs relative flex flex-col justify-between border border-neutral-200/80 rounded-2xl bg-white/80 p-4.5 transition-all duration-200 dark:border-neutral-800/80 hover:border-primary-500/40 dark:bg-neutral-900/60 hover:bg-white hover:shadow-md dark:hover:border-primary-400/40 dark:hover:bg-neutral-900"
+    <!-- Free Community Archives Section -->
+    <div class="mt-2 flex flex-col gap-3.5">
+      <div class="flex items-center justify-between px-1">
+        <div class="flex items-center gap-2">
+          <div class="i-solar:gift-bold-duotone text-base text-emerald-500" />
+          <div>
+            <span class="text-xs text-neutral-800 font-bold tracking-wider uppercase dark:text-neutral-200">
+              Free Community Archives
+            </span>
+            <span class="text-xs text-neutral-400 font-normal hidden sm:inline">
+              — Curated open repositories, extracted game assets, and direct downloads
+            </span>
+          </div>
+        </div>
+        <span class="text-[11px] text-neutral-400">
+          Showing {{ freeArchives.length }} archives
+        </span>
+      </div>
+
+      <!-- Free Archives Grid -->
+      <div v-if="freeArchives.length > 0" class="grid grid-cols-1 gap-3.5 lg:grid-cols-3 sm:grid-cols-2">
+        <a
+          v-for="site in freeArchives"
+          :key="site.name"
+          :href="site.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="group shadow-2xs relative flex flex-col justify-between border border-neutral-200/80 rounded-2xl bg-white/80 p-4.5 transition-all duration-200 dark:border-neutral-800/80 hover:border-emerald-500/40 dark:bg-neutral-900/60 hover:bg-white hover:shadow-md dark:hover:border-emerald-400/40 dark:hover:bg-neutral-900"
+        >
+          <div class="flex flex-col gap-2">
+            <!-- Card Header -->
+            <div class="flex items-start justify-between gap-2">
+              <h3 class="text-sm text-neutral-900 font-bold transition-colors dark:text-neutral-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                {{ site.name }}
+              </h3>
+              <div class="i-solar:arrow-up-right-linear text-base text-neutral-400 transition-all group-hover:translate-x-0.5 group-hover:translate-y--0.5 group-hover:text-emerald-500" />
+            </div>
+
+            <!-- Description -->
+            <p v-if="site.description" class="text-xs text-neutral-500 leading-relaxed dark:text-neutral-400">
+              {{ site.description }}
+            </p>
+
+            <!-- Badges (Pricing + Notice + Formats) -->
+            <div class="mt-1 flex flex-wrap items-center gap-1.5">
+              <span class="border border-emerald-500/25 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-600 font-bold dark:text-emerald-400">
+                100% Free
+              </span>
+              <span v-if="site.notice" class="border border-blue-500/25 rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-600 font-medium dark:text-blue-400">
+                {{ site.notice }}
+              </span>
+              <span v-if="site.vrm" class="border border-blue-500/20 rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-600 font-bold dark:text-blue-400">
+                VRM
+              </span>
+              <span v-if="site.live2d" class="border border-teal-500/20 rounded-md bg-teal-500/10 px-2 py-0.5 text-[10px] text-teal-600 font-bold dark:text-teal-400">
+                Live2D
+              </span>
+              <span v-if="site.spine" class="border border-purple-500/20 rounded-md bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-600 font-bold dark:text-purple-400">
+                Spine
+              </span>
+              <span v-if="site.mmd" class="border border-pink-500/20 rounded-md bg-pink-500/10 px-2 py-0.5 text-[10px] text-pink-600 font-bold dark:text-pink-400">
+                MMD
+              </span>
+            </div>
+          </div>
+
+          <!-- Card Footer -->
+          <div class="mt-4 flex items-center justify-between border-t border-neutral-100 pt-2.5 text-[11px] text-neutral-400 dark:border-neutral-800">
+            <div class="flex items-center gap-1.5">
+              <div class="i-solar:globus-linear text-xs" />
+              <span>{{ site.origin }}</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span v-for="lang in site.languages" :key="lang" class="rounded bg-neutral-100 px-1.5 py-0.5 dark:bg-neutral-800">
+                {{ formatLanguage(lang) }}
+              </span>
+            </div>
+          </div>
+        </a>
+      </div>
+
+      <!-- Empty State for Free Archives -->
+      <div
+        v-else
+        class="flex flex-col items-center justify-center border border-neutral-200 rounded-2xl border-dashed py-8 text-center dark:border-neutral-800"
       >
-        <div class="flex flex-col gap-2">
-          <!-- Card Header -->
-          <div class="flex items-start justify-between gap-2">
-            <h2 class="text-sm text-neutral-900 font-bold transition-colors dark:text-neutral-100 group-hover:text-primary-600 dark:group-hover:text-primary-400">
-              {{ site.name }}
-            </h2>
-            <div class="i-solar:arrow-up-right-linear text-base text-neutral-400 transition-all group-hover:translate-x-0.5 group-hover:translate-y--0.5 group-hover:text-primary-500" />
-          </div>
-
-          <!-- Description -->
-          <p v-if="site.description" class="text-xs text-neutral-500 leading-relaxed dark:text-neutral-400">
-            {{ site.description }}
-          </p>
-
-          <!-- Format Badges -->
-          <div class="mt-1 flex flex-wrap gap-1.5">
-            <span v-if="site.vrm" class="border border-blue-500/20 rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-600 font-bold dark:text-blue-400">
-              VRM
-            </span>
-            <span v-if="site.live2d" class="border border-emerald-500/20 rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-600 font-bold dark:text-emerald-400">
-              Live2D
-            </span>
-            <span v-if="site.spine" class="border border-purple-500/20 rounded-md bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-600 font-bold dark:text-purple-400">
-              Spine
-            </span>
-            <span v-if="site.mmd" class="border border-pink-500/20 rounded-md bg-pink-500/10 px-2 py-0.5 text-[10px] text-pink-600 font-bold dark:text-pink-400">
-              MMD
-            </span>
-          </div>
-        </div>
-
-        <!-- Card Footer -->
-        <div class="mt-4 flex items-center justify-between border-t border-neutral-100 pt-2.5 text-[11px] text-neutral-400 dark:border-neutral-800">
-          <div class="flex items-center gap-1.5">
-            <div class="i-solar:globus-linear text-xs" />
-            <span>{{ site.origin }}</span>
-          </div>
-          <div class="flex items-center gap-1">
-            <span v-for="lang in site.languages" :key="lang" class="rounded bg-neutral-100 px-1.5 py-0.5 dark:bg-neutral-800">
-              {{ formatLanguage(lang) }}
-            </span>
-          </div>
-        </div>
-      </a>
+        <p class="text-xs text-neutral-500 font-medium dark:text-neutral-400">
+          No free community archives found for this format filter. Check creator marketplaces below.
+        </p>
+      </div>
     </div>
 
-    <!-- Empty State -->
-    <div
-      v-if="filteredMarketplaces.length === 0"
-      class="flex flex-col items-center justify-center border border-neutral-300 rounded-2xl border-dashed py-12 text-center dark:border-neutral-700"
-    >
-      <div class="i-solar:ghost-bold-duotone text-4xl text-neutral-400" />
-      <p class="mt-2 text-sm text-neutral-600 font-semibold dark:text-neutral-300">
-        No matching resources found
-      </p>
-      <p class="mt-1 text-xs text-neutral-400">
-        Try adjusting your filter or search query.
-      </p>
+    <!-- Creator Marketplaces & Stores Section -->
+    <div class="mt-2 flex flex-col gap-3.5">
+      <div class="flex items-center justify-between px-1">
+        <div class="flex items-center gap-2">
+          <div class="i-solar:shop-bold-duotone text-base text-primary-500" />
+          <div>
+            <span class="text-xs text-neutral-800 font-bold tracking-wider uppercase dark:text-neutral-200">
+              Creator Marketplaces & Stores
+            </span>
+            <span class="text-xs text-neutral-400 font-normal hidden sm:inline">
+              — Independent storefronts, commercial asset hubs, and commission directories
+            </span>
+          </div>
+        </div>
+        <span class="text-[11px] text-neutral-400">
+          Showing {{ creatorMarketplaces.length }} platforms
+        </span>
+      </div>
+
+      <!-- Creator Marketplaces Grid -->
+      <div v-if="creatorMarketplaces.length > 0" class="grid grid-cols-1 gap-3.5 lg:grid-cols-3 sm:grid-cols-2">
+        <a
+          v-for="site in creatorMarketplaces"
+          :key="site.name"
+          :href="site.url"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="group shadow-2xs relative flex flex-col justify-between border border-neutral-200/80 rounded-2xl bg-white/80 p-4.5 transition-all duration-200 dark:border-neutral-800/80 hover:border-primary-500/40 dark:bg-neutral-900/60 hover:bg-white hover:shadow-md dark:hover:border-primary-400/40 dark:hover:bg-neutral-900"
+        >
+          <div class="flex flex-col gap-2">
+            <!-- Card Header -->
+            <div class="flex items-start justify-between gap-2">
+              <h3 class="text-sm text-neutral-900 font-bold transition-colors dark:text-neutral-100 group-hover:text-primary-600 dark:group-hover:text-primary-400">
+                {{ site.name }}
+              </h3>
+              <div class="i-solar:arrow-up-right-linear text-base text-neutral-400 transition-all group-hover:translate-x-0.5 group-hover:translate-y--0.5 group-hover:text-primary-500" />
+            </div>
+
+            <!-- Description -->
+            <p v-if="site.description" class="text-xs text-neutral-500 leading-relaxed dark:text-neutral-400">
+              {{ site.description }}
+            </p>
+
+            <!-- Badges (Pricing + Notice + Formats) -->
+            <div class="mt-1 flex flex-wrap items-center gap-1.5">
+              <span
+                v-if="site.pricing === 'paid'"
+                class="border border-purple-500/25 rounded-md bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-600 font-bold dark:text-purple-400"
+              >
+                Paid / Commissions
+              </span>
+              <span
+                v-else
+                class="border border-amber-500/25 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-600 font-bold dark:text-amber-400"
+              >
+                Free & Paid
+              </span>
+              <span v-if="site.notice" class="border border-blue-500/25 rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-600 font-medium dark:text-blue-400">
+                {{ site.notice }}
+              </span>
+              <span v-if="site.vrm" class="border border-blue-500/20 rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-600 font-bold dark:text-blue-400">
+                VRM
+              </span>
+              <span v-if="site.live2d" class="border border-teal-500/20 rounded-md bg-teal-500/10 px-2 py-0.5 text-[10px] text-teal-600 font-bold dark:text-teal-400">
+                Live2D
+              </span>
+              <span v-if="site.spine" class="border border-purple-500/20 rounded-md bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-600 font-bold dark:text-purple-400">
+                Spine
+              </span>
+              <span v-if="site.mmd" class="border border-pink-500/20 rounded-md bg-pink-500/10 px-2 py-0.5 text-[10px] text-pink-600 font-bold dark:text-pink-400">
+                MMD
+              </span>
+            </div>
+          </div>
+
+          <!-- Card Footer -->
+          <div class="mt-4 flex items-center justify-between border-t border-neutral-100 pt-2.5 text-[11px] text-neutral-400 dark:border-neutral-800">
+            <div class="flex items-center gap-1.5">
+              <div class="i-solar:globus-linear text-xs" />
+              <span>{{ site.origin }}</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span v-for="lang in site.languages" :key="lang" class="rounded bg-neutral-100 px-1.5 py-0.5 dark:bg-neutral-800">
+                {{ formatLanguage(lang) }}
+              </span>
+            </div>
+          </div>
+        </a>
+      </div>
+
+      <!-- Empty State for Creator Marketplaces -->
+      <div
+        v-else
+        class="flex flex-col items-center justify-center border border-neutral-200 rounded-2xl border-dashed py-8 text-center dark:border-neutral-800"
+      >
+        <p class="text-xs text-neutral-500 font-medium dark:text-neutral-400">
+          No marketplaces found for this format filter.
+        </p>
+      </div>
     </div>
 
     <!-- Community Contribution Footer Callout -->
